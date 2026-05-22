@@ -48,7 +48,7 @@ final class PetContentView: NSView {
     private var clickStartedOnPet = false
     private var didDrag = false
     private let frameTimerInterval: TimeInterval = 1.0 / 30.0
-    private let spriteFrameInterval: TimeInterval = 0.22
+    private let spriteFrameInterval: TimeInterval = 0.16
 
     var isBubbleVisible: Bool {
         !bubbleView.isHidden
