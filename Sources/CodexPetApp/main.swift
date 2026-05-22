@@ -25,7 +25,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, PetContentViewDelegate
     private var nextAutomaticVocabularyAt = Date().addingTimeInterval(90)
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        NSApplication.shared.setActivationPolicy(.accessory)
+        NSApplication.shared.setActivationPolicy(.regular)
         do {
             store = try AppDataStore()
         } catch {
@@ -53,10 +53,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, PetContentViewDelegate
     private func setupWindow() {
         let size = NSSize(width: 420, height: 500)
         let screenFrame = NSScreen.main?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1280, height: 800)
-        let savedOrigin = store.settings.lastWindowOrigin
-        let origin = savedOrigin ?? CGPoint(
-            x: screenFrame.maxX - size.width - 42,
-            y: screenFrame.minY + 60
+        let fallbackOrigin = CGPoint(x: screenFrame.maxX - size.width - 42, y: screenFrame.minY + 60)
+        let origin = visibleWindowOrigin(
+            savedOrigin: store.settings.lastWindowOrigin,
+            fallbackOrigin: fallbackOrigin,
+            size: size
         )
         window = NSPanel(
             contentRect: NSRect(origin: origin, size: size),
@@ -80,9 +81,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate, PetContentViewDelegate
         behaviorEngine.snap(to: window.frame.origin)
     }
 
+    private func visibleWindowOrigin(savedOrigin: CGPoint?, fallbackOrigin: CGPoint, size: NSSize) -> CGPoint {
+        let frames = NSScreen.screens.map(\.visibleFrame)
+        let fallbackFrame = NSScreen.main?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1280, height: 800)
+        if let savedOrigin {
+            let savedRect = NSRect(origin: savedOrigin, size: size)
+            if let frame = frames.first(where: { $0.intersection(savedRect).width >= 80 && $0.intersection(savedRect).height >= 80 }) {
+                return clampedOrigin(savedOrigin, size: size, in: frame)
+            }
+        }
+        return clampedOrigin(fallbackOrigin, size: size, in: fallbackFrame)
+    }
+
+    private func clampedOrigin(_ origin: CGPoint, size: NSSize, in frame: NSRect) -> CGPoint {
+        CGPoint(
+            x: min(max(origin.x, frame.minX + 8), frame.maxX - size.width - 8),
+            y: min(max(origin.y, frame.minY + 8), frame.maxY - size.height - 8)
+        )
+    }
+
     private func setupMenu() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-        statusItem.button?.title = AppBrand.displayName
+        if let icon = statusBarIcon() {
+            statusItem.button?.image = icon
+            statusItem.button?.imagePosition = .imageOnly
+            statusItem.button?.toolTip = AppBrand.displayName
+        } else {
+            statusItem.button?.title = AppBrand.displayName
+        }
 
         let menu = NSMenu()
         menu.addItem(NSMenuItem(title: "打开配置中心...", action: #selector(showSettingsCenter), keyEquivalent: ","))
@@ -109,6 +135,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, PetContentViewDelegate
         menu.addItem(NSMenuItem.separator())
         menu.addItem(NSMenuItem(title: "退出", action: #selector(quit), keyEquivalent: "q"))
         statusItem.menu = menu
+    }
+
+    private func statusBarIcon() -> NSImage? {
+        guard let url = Bundle.module.url(forResource: "AppIcon", withExtension: "png"),
+              let image = NSImage(contentsOf: url) else {
+            return nil
+        }
+        image.size = NSSize(width: 18, height: 18)
+        image.isTemplate = false
+        return image
     }
 
     private func startHTTPServer() {
