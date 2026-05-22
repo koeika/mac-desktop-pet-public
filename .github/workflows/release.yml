@@ -79,7 +79,7 @@ jobs:
           2. 打开 `whiskycolin.app`。
           3. 如果 macOS 提示来自未认证开发者，请右键 `whiskycolin.app`，选择 `打开`。
 
-          当前 release 使用 ad-hoc 签名，没有 Developer ID 公证。
+          当前 release 未签名、未做 Developer ID 公证。
 
           ## 使用 petctl 上报 AI 进度
 
@@ -91,7 +91,6 @@ jobs:
           `petctl` 需要在 `whiskycolin.app` 运行时使用。
           INSTALL
 
-          codesign --force --deep --sign - "${app_dir}"
           ditto -c -k --sequesterRsrc --keepParent "${dist_dir}" "dist/${dist_name}.zip"
 
       - name: Create GitHub Release
@@ -103,4 +102,4 @@ jobs:
           asset="dist/whiskycolin-${version}-macos-arm64.zip"
           gh release create "${version}" "${asset}" \
             --title "whiskycolin ${version}" \
-            --notes "macOS 14+ release package. Includes whiskycolin.app, petctl, README, install notes, and dictionary import templates. This build is ad-hoc signed and not notarized."
+            --notes "macOS 14+ release package. Includes whiskycolin.app, petctl, README, install notes, and dictionary import templates. This build is unsigned and not notarized."
