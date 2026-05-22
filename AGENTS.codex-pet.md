@@ -1,4 +1,4 @@
-When working in Codex, report task progress to the local whiskycolin desktop pet app if it is available.
+When working in Codex, report task progress to the local Whisky&Cling desktop pet app if it is available.
 
 Prefer the local HTTP API. It avoids SwiftPM manifest and build-cache access, which can fail inside Codex's sandbox. Do not use `swift run` for routine progress reporting unless HTTP and a prebuilt `petctl` binary are unavailable.
 

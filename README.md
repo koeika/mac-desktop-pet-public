@@ -1,4 +1,4 @@
-# whiskycolin
+# Whisky&Cling
 
 macOS 桌宠应用：自定义宠物素材、AI 编程进度提醒、背单词互动复习。
 
@@ -27,7 +27,7 @@ Native macOS desktop pet for AI coding progress and lightweight vocabulary revie
 
 从 [GitHub Releases](https://github.com/koeika/mac-desktop-pet-public/releases) 下载最新的 `whiskycolin-<version>-macos-arm64.zip`。
 
-解压后可以打开 `whiskycolin.app`。发布包做了 ad-hoc 签名，但尚未做 Apple Developer ID 公证；如果 macOS 提示来自未认证开发者，请右键 `whiskycolin.app`，选择 `打开`。
+解压后可以打开 `Whisky&Cling.app`。发布包做了 ad-hoc 签名，但尚未做 Apple Developer ID 公证；如果 macOS 提示来自未认证开发者，请右键 `Whisky&Cling.app`，选择 `打开`。
 
 zip 内也包含 `bin/petctl`，可用于向运行中的桌宠上报 AI 进度。
 
@@ -39,13 +39,13 @@ cd mac-desktop-pet-public
 swift run whiskycolin
 ```
 
-启动后会出现菜单栏应用 `whiskycolin`、透明桌宠窗口，以及配置中心。首次没有导入宠物时会自动打开配置中心。
+启动后会出现菜单栏应用 `Whisky&Cling`、透明桌宠窗口，以及配置中心。首次没有导入宠物时会自动打开配置中心。
 
 最低目标系统：macOS 14+。
 
 ## 配置中心
 
-从菜单栏 `whiskycolin` 打开 `打开配置中心...`。
+从菜单栏 `Whisky&Cling` 打开 `打开配置中心...`。
 
 ### 宠物管理
 

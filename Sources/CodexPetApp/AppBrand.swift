@@ -1,3 +1,3 @@
 enum AppBrand {
-    static let displayName = "whiskycolin"
+    static let displayName = "Whisky&Cling"
 }

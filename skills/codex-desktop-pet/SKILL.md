@@ -1,9 +1,9 @@
 ---
 name: codex-desktop-pet
-description: Report Codex work progress to the local whiskycolin macOS desktop pet app.
+description: Report Codex work progress to the local Whisky&Cling macOS desktop pet app.
 ---
 
-Use this skill whenever the local whiskycolin/Codex Desktop Pet app should reflect Codex task progress.
+Use this skill whenever the local Whisky&Cling/Codex Desktop Pet app should reflect Codex task progress.
 
 Prefer the local HTTP API for routine Codex progress reporting. It avoids SwiftPM manifest and build-cache access, which can fail inside Codex's sandbox. Do not use `swift run` for routine reporting from Codex unless the HTTP API and a prebuilt `petctl` binary are unavailable.
 

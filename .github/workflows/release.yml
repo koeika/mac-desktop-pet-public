@@ -20,7 +20,7 @@ jobs:
       - name: Build release binaries
         run: swift build -c release
 
-      - name: Package whiskycolin
+      - name: Package Whisky&Cling
         run: |
           set -euo pipefail
 
@@ -28,7 +28,7 @@ jobs:
           app_version="${version#v}"
           dist_name="whiskycolin-${version}-macos-arm64"
           dist_dir="dist/${dist_name}"
-          app_dir="${dist_dir}/whiskycolin.app"
+          app_dir="${dist_dir}/Whisky&Cling.app"
 
           rm -rf dist
           mkdir -p "${app_dir}/Contents/MacOS"
@@ -52,9 +52,9 @@ jobs:
             <key>CFBundleIdentifier</key>
             <string>app.whiskycolin.desktop-pet</string>
             <key>CFBundleName</key>
-            <string>whiskycolin</string>
+            <string>Whisky&amp;Cling</string>
             <key>CFBundleDisplayName</key>
-            <string>whiskycolin</string>
+            <string>Whisky&amp;Cling</string>
             <key>CFBundleIconFile</key>
             <string>AppIcon</string>
             <key>CFBundlePackageType</key>
@@ -79,13 +79,13 @@ jobs:
           cp -R examples "${dist_dir}/examples"
 
           cat > "${dist_dir}/INSTALL.md" <<'INSTALL'
-          # whiskycolin 安装说明
+          # Whisky&Cling 安装说明
 
           ## 运行桌宠
 
           1. 解压 zip。
-          2. 打开 `whiskycolin.app`。
-          3. 如果 macOS 提示来自未认证开发者，请右键 `whiskycolin.app`，选择 `打开`。
+          2. 打开 `Whisky&Cling.app`。
+          3. 如果 macOS 提示来自未认证开发者，请右键 `Whisky&Cling.app`，选择 `打开`。
 
           当前 release 未签名、未做 Developer ID 公证。
 
@@ -96,7 +96,7 @@ jobs:
           ./bin/petctl done --source codex --stage "完成" --message "任务完成" --progress 100
           ```
 
-          `petctl` 需要在 `whiskycolin.app` 运行时使用。
+          `petctl` 需要在 `Whisky&Cling.app` 运行时使用。
           INSTALL
 
           ditto -c -k --sequesterRsrc --keepParent "${dist_dir}" "dist/${dist_name}.zip"
@@ -109,5 +109,5 @@ jobs:
           version="${GITHUB_REF_NAME}"
           asset="dist/whiskycolin-${version}-macos-arm64.zip"
           gh release create "${version}" "${asset}" \
-            --title "whiskycolin ${version}" \
-            --notes "macOS 14+ release package. Includes whiskycolin.app, petctl, README, install notes, and dictionary import templates. This build is unsigned and not notarized."
+            --title "Whisky&Cling ${version}" \
+            --notes "macOS 14+ release package. Includes Whisky&Cling.app, petctl, README, install notes, and dictionary import templates. This build uses ad-hoc signing and is not notarized."
