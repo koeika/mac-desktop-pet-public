@@ -27,7 +27,7 @@ final class PetContentView: NSView {
     private let bodyLabel = NSTextField(wrappingLabelWithString: "")
     private let footerLabel = NSTextField(labelWithString: "")
     private let knownButton = NSButton(title: "认识啦", target: nil, action: nil)
-    private let unknownButton = NSButton(title: "再解释", target: nil, action: nil)
+    private let unknownButton = NSButton(title: "不认识", target: nil, action: nil)
     private let skipButton = NSButton(title: "先跳过", target: nil, action: nil)
     private let petContainer = NSView()
     private let imageView = NSImageView()

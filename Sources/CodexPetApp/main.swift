@@ -461,30 +461,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, PetContentViewDelegate
     func markUnknown() {
         guard let word = activeWord else { return }
         vocabularyQuestionTimer?.invalidate()
+        vocabularyQuestionTimer = nil
         store.vocabularyProgress.mark(dictionaryID: word.dictionaryID, term: word.entry.term, action: .unknown)
         store.saveLearningProgress()
-        setTemporaryAction(.review, duration: 3.0)
-        let explanation = [
-            word.entry.meaning,
-            word.entry.example.map { "例句：\($0)" },
-            word.entry.hint.map { "提示：\($0)" }
-        ].compactMap { $0 }.joined(separator: " ")
-        contentView.showMessage(
-            kicker: "待加强",
-            title: word.entry.term,
-            body: explanation,
-            showActions: true,
-            footer: vocabularyFooterText()
-        )
-        if !store.settings.vocabularyQuestionPersists {
-            vocabularyQuestionTimer = Timer.scheduledTimer(withTimeInterval: 22, repeats: false) { [weak self] _ in
-                self?.clearActiveVocabularyQuestion()
-                self?.contentView.hideBubble(animated: true)
-            }
-            if let vocabularyQuestionTimer {
-                RunLoop.main.add(vocabularyQuestionTimer, forMode: .common)
-            }
-        }
+        setTemporaryAction(.review, duration: 1.6)
+        activeWord = nil
+        contentView.hideBubble(animated: true)
     }
 
     func skipWord() {
