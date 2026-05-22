@@ -1,0 +1,24 @@
+{
+  "id": "my-dictionary",
+  "name": "My Dictionary",
+  "description": "Personal imported word list",
+  "entries": [
+    {
+      "term": "coherent",
+      "phonetic": "/koʊˈhɪrənt/",
+      "meaning": "连贯的；条理清楚的",
+      "example": "A coherent essay has clear transitions.",
+      "hint": "Useful in IELTS writing.",
+      "tags": ["ielts", "writing"]
+    },
+    {
+      "term": "わたし",
+      "reading": "watashi",
+      "meaning": "我",
+      "example": "わたしは エンジニアです。",
+      "hint": "Polite first-person pronoun.",
+      "tags": ["japanese", "beginner"]
+    }
+  ]
+}
+

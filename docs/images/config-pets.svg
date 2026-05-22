@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1040" height="560" viewBox="0 0 1040 560" role="img" aria-labelledby="title desc">
+  <title id="title">whiskycolin pet management configuration screen</title>
+  <desc id="desc">A diagram of the pet management tab, showing upload, URL install, movement speed, click feedback, pet preview, and pet cards.</desc>
+  <rect width="1040" height="560" rx="28" fill="#f7f8fb"/>
+  <rect x="28" y="28" width="984" height="504" rx="22" fill="#ffffff" stroke="#dfe4ec"/>
+  <rect x="28" y="28" width="190" height="504" rx="22" fill="#fbfbfc"/>
+  <line x1="218" y1="28" x2="218" y2="532" stroke="#e5e7eb"/>
+  <text x="54" y="76" font-family="Inter, Arial, sans-serif" font-size="28" font-weight="800" fill="#22252b">whiskycolin</text>
+  <text x="54" y="103" font-family="Inter, Arial, sans-serif" font-size="14" fill="#8a8f98">配置宠物、词典和 AI 接入</text>
+  <rect x="46" y="142" width="150" height="54" rx="12" fill="#e9f6e6"/>
+  <text x="76" y="165" font-family="Inter, Arial, sans-serif" font-size="15" font-weight="700" fill="#22252b">宠物管理</text>
+  <text x="76" y="184" font-family="Inter, Arial, sans-serif" font-size="12" fill="#747b84">上传、启用、权重</text>
+  <text x="76" y="242" font-family="Inter, Arial, sans-serif" font-size="15" font-weight="700" fill="#22252b">词典学习</text>
+  <text x="76" y="262" font-family="Inter, Arial, sans-serif" font-size="12" fill="#747b84">导入和复习统计</text>
+  <text x="76" y="318" font-family="Inter, Arial, sans-serif" font-size="15" font-weight="700" fill="#22252b">AI 进度接入</text>
+  <text x="76" y="338" font-family="Inter, Arial, sans-serif" font-size="12" fill="#747b84">命令、HTTP、事件</text>
+
+  <text x="250" y="82" font-family="Inter, Arial, sans-serif" font-size="34" font-weight="850" fill="#202226">宠物管理</text>
+  <text x="250" y="112" font-family="Inter, Arial, sans-serif" font-size="16" fill="#747b84">上传自己的宠物素材，安装 Codex pet 包，配置行为和点击反馈。</text>
+
+  <rect x="250" y="142" width="210" height="48" rx="24" fill="#54bb42"/>
+  <text x="292" y="172" font-family="Inter, Arial, sans-serif" font-size="16" font-weight="750" fill="#ffffff">上传宠物素材</text>
+  <rect x="474" y="142" width="170" height="48" rx="24" fill="#54bb42"/>
+  <text x="512" y="172" font-family="Inter, Arial, sans-serif" font-size="16" font-weight="750" fill="#ffffff">从 URL 安装</text>
+  <rect x="658" y="142" width="210" height="48" rx="24" fill="#eceef1"/>
+  <text x="706" y="172" font-family="Inter, Arial, sans-serif" font-size="16" font-weight="750" fill="#33363b">导入本地包</text>
+
+  <rect x="250" y="218" width="280" height="252" rx="22" fill="#fff8ef" stroke="#f0d7b7"/>
+  <text x="278" y="255" font-family="Inter, Arial, sans-serif" font-size="18" font-weight="800" fill="#24272c">当前宠物预览</text>
+  <circle cx="390" cy="338" r="62" fill="#f7c66d"/>
+  <circle cx="360" cy="328" r="10" fill="#2b2b2b"/>
+  <circle cx="420" cy="328" r="10" fill="#2b2b2b"/>
+  <path d="M372 365 Q390 382 408 365" fill="none" stroke="#2b2b2b" stroke-width="7" stroke-linecap="round"/>
+  <path d="M333 283 L355 247 L378 286 Z" fill="#f7c66d"/>
+  <path d="M447 283 L425 247 L402 286 Z" fill="#f7c66d"/>
+  <rect x="292" y="423" width="196" height="18" rx="9" fill="#ead9c7"/>
+  <text x="278" y="454" font-family="Inter, Arial, sans-serif" font-size="13" fill="#7e6c58">慢速随机走动、暂停、跳跃、挥手</text>
+
+  <rect x="558" y="218" width="384" height="104" rx="18" fill="#f9fbff" stroke="#dfe6f1"/>
+  <text x="582" y="252" font-family="Inter, Arial, sans-serif" font-size="18" font-weight="800" fill="#24272c">移动速度</text>
+  <rect x="582" y="280" width="260" height="10" rx="5" fill="#d9dee7"/>
+  <rect x="582" y="280" width="74" height="10" rx="5" fill="#54bb42"/>
+  <circle cx="656" cy="285" r="15" fill="#54bb42"/>
+  <text x="860" y="290" font-family="Inter, Arial, sans-serif" font-size="16" font-weight="800" fill="#54bb42">0.20x</text>
+
+  <rect x="558" y="342" width="384" height="128" rx="18" fill="#f9fbff" stroke="#dfe6f1"/>
+  <text x="582" y="376" font-family="Inter, Arial, sans-serif" font-size="18" font-weight="800" fill="#24272c">点击反馈</text>
+  <rect x="582" y="398" width="92" height="34" rx="17" fill="#e9f6e6"/>
+  <text x="606" y="420" font-family="Inter, Arial, sans-serif" font-size="14" font-weight="700" fill="#329327">喵喵</text>
+  <rect x="684" y="398" width="116" height="34" rx="17" fill="#fff0dc"/>
+  <text x="708" y="420" font-family="Inter, Arial, sans-serif" font-size="14" font-weight="700" fill="#c76d25">我在呢</text>
+  <rect x="810" y="398" width="108" height="34" rx="17" fill="#eaf2ff"/>
+  <text x="834" y="420" font-family="Inter, Arial, sans-serif" font-size="14" font-weight="700" fill="#2e7ccb">继续呀</text>
+  <text x="582" y="452" font-family="Inter, Arial, sans-serif" font-size="13" fill="#747b84">点击桌宠时随机出现，可配置 3-5 条。</text>
+</svg>

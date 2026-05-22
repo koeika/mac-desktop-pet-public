@@ -1,0 +1,60 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1040" height="560" viewBox="0 0 1040 560" role="img" aria-labelledby="title desc">
+  <title id="title">whiskycolin dictionary learning configuration screen</title>
+  <desc id="desc">A diagram of the dictionary learning tab, showing dictionary import, PDF import, category filters, learning pace, provider key status, and dictionary cards.</desc>
+  <rect width="1040" height="560" rx="28" fill="#f7f8fb"/>
+  <rect x="28" y="28" width="984" height="504" rx="22" fill="#ffffff" stroke="#dfe4ec"/>
+  <rect x="28" y="28" width="190" height="504" rx="22" fill="#fbfbfc"/>
+  <line x1="218" y1="28" x2="218" y2="532" stroke="#e5e7eb"/>
+  <text x="54" y="76" font-family="Inter, Arial, sans-serif" font-size="28" font-weight="800" fill="#22252b">whiskycolin</text>
+  <text x="54" y="103" font-family="Inter, Arial, sans-serif" font-size="14" fill="#8a8f98">配置宠物、词典和 AI 接入</text>
+  <text x="76" y="165" font-family="Inter, Arial, sans-serif" font-size="15" font-weight="700" fill="#22252b">宠物管理</text>
+  <rect x="46" y="218" width="150" height="54" rx="12" fill="#e9f6e6"/>
+  <text x="76" y="242" font-family="Inter, Arial, sans-serif" font-size="15" font-weight="700" fill="#22252b">词典学习</text>
+  <text x="76" y="262" font-family="Inter, Arial, sans-serif" font-size="12" fill="#747b84">导入和复习统计</text>
+  <text x="76" y="318" font-family="Inter, Arial, sans-serif" font-size="15" font-weight="700" fill="#22252b">AI 进度接入</text>
+
+  <text x="250" y="82" font-family="Inter, Arial, sans-serif" font-size="34" font-weight="850" fill="#202226">词典学习</text>
+  <text x="250" y="112" font-family="Inter, Arial, sans-serif" font-size="16" fill="#747b84">导入 CSV/JSON/PDF，按分类管理词典，并配置自动出词节奏。</text>
+
+  <rect x="250" y="142" width="210" height="48" rx="24" fill="#54bb42"/>
+  <text x="296" y="172" font-family="Inter, Arial, sans-serif" font-size="16" font-weight="750" fill="#ffffff">导入 CSV/JSON</text>
+  <rect x="474" y="142" width="176" height="48" rx="24" fill="#54bb42"/>
+  <text x="516" y="172" font-family="Inter, Arial, sans-serif" font-size="16" font-weight="750" fill="#ffffff">导入 PDF</text>
+  <rect x="664" y="142" width="150" height="48" rx="24" fill="#eceef1"/>
+  <text x="704" y="172" font-family="Inter, Arial, sans-serif" font-size="16" font-weight="750" fill="#33363b">CSV 模板</text>
+  <rect x="828" y="142" width="150" height="48" rx="24" fill="#eceef1"/>
+  <text x="868" y="172" font-family="Inter, Arial, sans-serif" font-size="16" font-weight="750" fill="#33363b">导入格式</text>
+
+  <text x="250" y="231" font-family="Inter, Arial, sans-serif" font-size="18" font-weight="800" fill="#24272c">分类</text>
+  <rect x="304" y="209" width="72" height="34" rx="17" fill="#54bb42"/>
+  <text x="328" y="231" font-family="Inter, Arial, sans-serif" font-size="14" font-weight="700" fill="#ffffff">全部</text>
+  <rect x="386" y="209" width="72" height="34" rx="17" fill="#eaf2ff"/>
+  <text x="410" y="231" font-family="Inter, Arial, sans-serif" font-size="14" font-weight="700" fill="#2e7ccb">英语</text>
+  <rect x="468" y="209" width="72" height="34" rx="17" fill="#e9f6e6"/>
+  <text x="492" y="231" font-family="Inter, Arial, sans-serif" font-size="14" font-weight="700" fill="#329327">日语</text>
+  <rect x="550" y="209" width="90" height="34" rx="17" fill="#f1f2f4"/>
+  <text x="574" y="231" font-family="Inter, Arial, sans-serif" font-size="14" font-weight="700" fill="#6e747c">未分类</text>
+
+  <rect x="250" y="274" width="310" height="176" rx="20" fill="#ffffff" stroke="#dfe4ec"/>
+  <text x="274" y="312" font-family="Inter, Arial, sans-serif" font-size="21" font-weight="850" fill="#22252b">雅思高频单词</text>
+  <text x="274" y="338" font-family="Inter, Arial, sans-serif" font-size="13" fill="#747b84">英语 · 词汇卡自动复习</text>
+  <rect x="470" y="300" width="58" height="30" rx="15" fill="#54bb42"/>
+  <circle cx="514" cy="315" r="12" fill="#ffffff"/>
+  <rect x="274" y="362" width="78" height="44" rx="10" fill="#e8f8ef"/>
+  <text x="308" y="386" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="18" font-weight="850" fill="#22252b">9</text>
+  <text x="308" y="401" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="11" fill="#6e747c">已学</text>
+  <rect x="364" y="362" width="78" height="44" rx="10" fill="#fff1e4"/>
+  <text x="403" y="386" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="18" font-weight="850" fill="#22252b">3</text>
+  <text x="403" y="401" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="11" fill="#6e747c">待加强</text>
+  <rect x="454" y="362" width="78" height="44" rx="10" fill="#f1f2f4"/>
+  <text x="493" y="386" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="18" font-weight="850" fill="#22252b">5</text>
+  <text x="493" y="401" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="11" fill="#6e747c">跳过</text>
+
+  <rect x="584" y="274" width="394" height="176" rx="20" fill="#f9fbff" stroke="#dfe6f1"/>
+  <text x="608" y="312" font-family="Inter, Arial, sans-serif" font-size="21" font-weight="850" fill="#22252b">学习节奏</text>
+  <text x="608" y="344" font-family="Inter, Arial, sans-serif" font-size="15" font-weight="700" fill="#24272c">每天自动展示 10 词</text>
+  <rect x="814" y="326" width="98" height="36" rx="18" fill="#f1f2f4"/>
+  <text x="842" y="349" font-family="Inter, Arial, sans-serif" font-size="15" font-weight="800" fill="#33363b">1-50</text>
+  <text x="608" y="384" font-family="Inter, Arial, sans-serif" font-size="15" font-weight="700" fill="#24272c">学习窗口 6 小时</text>
+  <text x="608" y="424" font-family="Inter, Arial, sans-serif" font-size="13" fill="#747b84">词汇题可持续展示直到点击反馈。</text>
+</svg>
