@@ -1,0 +1,106 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build-macos:
+    name: Build macOS release package
+    runs-on: macos-14
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build release binaries
+        run: swift build -c release
+
+      - name: Package whiskycolin
+        run: |
+          set -euo pipefail
+
+          version="${GITHUB_REF_NAME}"
+          dist_name="whiskycolin-${version}-macos-arm64"
+          dist_dir="dist/${dist_name}"
+          app_dir="${dist_dir}/whiskycolin.app"
+
+          rm -rf dist
+          mkdir -p "${app_dir}/Contents/MacOS"
+          mkdir -p "${app_dir}/Contents/Resources"
+          mkdir -p "${dist_dir}/bin"
+
+          cp .build/release/whiskycolin "${app_dir}/Contents/MacOS/whiskycolin"
+          cp .build/release/petctl "${dist_dir}/bin/petctl"
+          cp -R .build/release/CodexDesktopPet_CodexPetApp.bundle "${app_dir}/CodexDesktopPet_CodexPetApp.bundle"
+          chmod +x "${app_dir}/Contents/MacOS/whiskycolin"
+          chmod +x "${dist_dir}/bin/petctl"
+
+          cat > "${app_dir}/Contents/Info.plist" <<'PLIST'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>CFBundleExecutable</key>
+            <string>whiskycolin</string>
+            <key>CFBundleIdentifier</key>
+            <string>app.whiskycolin.desktop-pet</string>
+            <key>CFBundleName</key>
+            <string>whiskycolin</string>
+            <key>CFBundleDisplayName</key>
+            <string>whiskycolin</string>
+            <key>CFBundlePackageType</key>
+            <string>APPL</string>
+            <key>CFBundleShortVersionString</key>
+            <string>0.1.0</string>
+            <key>CFBundleVersion</key>
+            <string>1</string>
+            <key>LSMinimumSystemVersion</key>
+            <string>14.0</string>
+            <key>NSHighResolutionCapable</key>
+            <true/>
+          </dict>
+          </plist>
+          PLIST
+
+          cp README.md LICENSE "${dist_dir}/"
+          cp -R examples "${dist_dir}/examples"
+
+          cat > "${dist_dir}/INSTALL.md" <<'INSTALL'
+          # whiskycolin 安装说明
+
+          ## 运行桌宠
+
+          1. 解压 zip。
+          2. 打开 `whiskycolin.app`。
+          3. 如果 macOS 提示来自未认证开发者，请右键 `whiskycolin.app`，选择 `打开`。
+
+          当前 release 使用 ad-hoc 签名，没有 Developer ID 公证。
+
+          ## 使用 petctl 上报 AI 进度
+
+          ```bash
+          ./bin/petctl progress --source codex --stage "实现功能" --message "正在修改文件" --progress 60
+          ./bin/petctl done --source codex --stage "完成" --message "任务完成" --progress 100
+          ```
+
+          `petctl` 需要在 `whiskycolin.app` 运行时使用。
+          INSTALL
+
+          codesign --force --deep --sign - "${app_dir}"
+          ditto -c -k --sequesterRsrc --keepParent "${dist_dir}" "dist/${dist_name}.zip"
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          version="${GITHUB_REF_NAME}"
+          asset="dist/whiskycolin-${version}-macos-arm64.zip"
+          gh release create "${version}" "${asset}" \
+            --title "whiskycolin ${version}" \
+            --notes "macOS 14+ release package. Includes whiskycolin.app, petctl, README, install notes, and dictionary import templates. This build is ad-hoc signed and not notarized."

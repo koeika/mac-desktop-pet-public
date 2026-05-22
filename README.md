@@ -23,7 +23,15 @@ Native macOS desktop pet for AI coding progress and lightweight vocabulary revie
 - 例句与音标补全：支持 OpenAI 或 DeepSeek key，批量补例句或音标。
 - 本地优先：宠物素材和设置保存在本机，API key 存 macOS Keychain。
 
-## 快速开始
+## 下载发布包
+
+从 [GitHub Releases](https://github.com/koeika/mac-desktop-pet-public/releases) 下载最新的 `whiskycolin-<version>-macos-arm64.zip`。
+
+解压后可以直接打开 `whiskycolin.app`。如果 macOS 提示来自未认证开发者，请右键 `whiskycolin.app`，选择 `打开`。当前发布包是 ad-hoc 签名，尚未做 Apple Developer ID 公证。
+
+zip 内也包含 `bin/petctl`，可用于向运行中的桌宠上报 AI 进度。
+
+## 从源码运行
 
 ```bash
 git clone git@github.com:koeika/mac-desktop-pet-public.git
@@ -33,7 +41,7 @@ swift run whiskycolin
 
 启动后会出现菜单栏应用 `whiskycolin`、透明桌宠窗口，以及配置中心。首次没有导入宠物时会自动打开配置中心。
 
-最低目标系统：macOS 14+。v1 交付 SwiftPM 源码运行方式，不包含签名、公证或 DMG。
+最低目标系统：macOS 14+。
 
 ## 配置中心
 
@@ -147,15 +155,14 @@ swift run codex-pet-selftest
 
 ## 发布给别人使用
 
-当前推荐源码发布：
+推送 `v*` tag 会触发 `.github/workflows/release.yml`，自动构建并发布 macOS zip 包。
 
 ```bash
-git clone git@github.com:koeika/mac-desktop-pet-public.git
-cd mac-desktop-pet-public
-swift run whiskycolin
+git tag v0.1.0
+git push origin v0.1.0
 ```
 
-如果要做普通用户双击安装，需要后续增加 `.app` 打包、签名、公证和 DMG，这通常需要 Apple Developer 账号。
+当前自动发布包包含 `.app` 和 `petctl`，但没有 Developer ID 公证。要做完全正常的双击安装体验，后续还需要 Apple Developer 账号、Developer ID 签名、公证和 DMG。
 
 ## 合法内容说明
 
