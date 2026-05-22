@@ -25,6 +25,7 @@ jobs:
           set -euo pipefail
 
           version="${GITHUB_REF_NAME}"
+          app_version="${version#v}"
           dist_name="whiskycolin-${version}-macos-arm64"
           dist_dir="dist/${dist_name}"
           app_dir="${dist_dir}/whiskycolin.app"
@@ -36,7 +37,7 @@ jobs:
 
           cp .build/release/whiskycolin "${app_dir}/Contents/MacOS/whiskycolin"
           cp .build/release/petctl "${dist_dir}/bin/petctl"
-          cp -R .build/release/CodexDesktopPet_CodexPetApp.bundle "${app_dir}/CodexDesktopPet_CodexPetApp.bundle"
+          cp -R .build/release/CodexDesktopPet_CodexPetApp.bundle "${app_dir}/Contents/Resources/CodexDesktopPet_CodexPetApp.bundle"
           chmod +x "${app_dir}/Contents/MacOS/whiskycolin"
           chmod +x "${dist_dir}/bin/petctl"
 
@@ -56,7 +57,7 @@ jobs:
             <key>CFBundlePackageType</key>
             <string>APPL</string>
             <key>CFBundleShortVersionString</key>
-            <string>0.1.0</string>
+            <string>${APP_VERSION}</string>
             <key>CFBundleVersion</key>
             <string>1</string>
             <key>LSMinimumSystemVersion</key>
@@ -66,6 +67,10 @@ jobs:
           </dict>
           </plist>
           PLIST
+          /usr/bin/sed -i '' "s/\${APP_VERSION}/${app_version}/g" "${app_dir}/Contents/Info.plist"
+
+          codesign --force --deep --sign - "${app_dir}"
+          codesign --verify --deep --strict --verbose=2 "${app_dir}"
 
           cp README.md LICENSE "${dist_dir}/"
           cp -R examples "${dist_dir}/examples"

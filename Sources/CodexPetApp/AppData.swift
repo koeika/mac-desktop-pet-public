@@ -1043,10 +1043,8 @@ final class AppDataStore: ObservableObject {
     }
 
     private func installBundledDictionariesIfNeeded() throws {
-        guard let files = Bundle.module.urls(
-            forResourcesWithExtension: "json",
-            subdirectory: "Dictionaries"
-        ) else {
+        let files = bundledDictionaryFiles()
+        guard !files.isEmpty else {
             return
         }
 
@@ -1072,6 +1070,40 @@ final class AppDataStore: ObservableObject {
         if didChangeSettings {
             saveSettings()
         }
+    }
+
+    private func bundledDictionaryFiles() -> [URL] {
+        let resourceBundleName = "CodexDesktopPet_CodexPetApp.bundle"
+        var candidateDirectories: [URL] = []
+
+        if let resourceURL = Bundle.main.resourceURL {
+            candidateDirectories.append(resourceURL.appendingPathComponent(resourceBundleName, isDirectory: true))
+        }
+        candidateDirectories.append(Bundle.main.bundleURL.appendingPathComponent(resourceBundleName, isDirectory: true))
+        candidateDirectories.append(Bundle.module.bundleURL)
+
+        var seen = Set<String>()
+        var files: [URL] = []
+        for directory in candidateDirectories {
+            guard FileManager.default.fileExists(atPath: directory.path) else { continue }
+            let possibleDirectories = [
+                directory.appendingPathComponent("Dictionaries", isDirectory: true),
+                directory
+            ]
+            for possibleDirectory in possibleDirectories {
+                guard let contents = try? FileManager.default.contentsOfDirectory(
+                    at: possibleDirectory,
+                    includingPropertiesForKeys: nil
+                ) else {
+                    continue
+                }
+                for file in contents where file.pathExtension.lowercased() == "json" && !seen.contains(file.path) {
+                    seen.insert(file.path)
+                    files.append(file)
+                }
+            }
+        }
+        return files
     }
 
     private func resolveDownloadURL(for reference: CodexPetRemoteReference) async throws -> URL {

@@ -27,7 +27,7 @@ Native macOS desktop pet for AI coding progress and lightweight vocabulary revie
 
 从 [GitHub Releases](https://github.com/koeika/mac-desktop-pet-public/releases) 下载最新的 `whiskycolin-<version>-macos-arm64.zip`。
 
-解压后可以直接打开 `whiskycolin.app`。如果 macOS 提示来自未认证开发者，请右键 `whiskycolin.app`，选择 `打开`。当前发布包未签名，尚未做 Apple Developer ID 公证。
+解压后可以打开 `whiskycolin.app`。发布包做了 ad-hoc 签名，但尚未做 Apple Developer ID 公证；如果 macOS 提示来自未认证开发者，请右键 `whiskycolin.app`，选择 `打开`。
 
 zip 内也包含 `bin/petctl`，可用于向运行中的桌宠上报 AI 进度。
 
