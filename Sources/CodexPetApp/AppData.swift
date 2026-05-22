@@ -1073,19 +1073,9 @@ final class AppDataStore: ObservableObject {
     }
 
     private func bundledDictionaryFiles() -> [URL] {
-        let resourceBundleName = "CodexDesktopPet_CodexPetApp.bundle"
-        var candidateDirectories: [URL] = []
-
-        if let resourceURL = Bundle.main.resourceURL {
-            candidateDirectories.append(resourceURL.appendingPathComponent(resourceBundleName, isDirectory: true))
-        }
-        candidateDirectories.append(Bundle.main.bundleURL.appendingPathComponent(resourceBundleName, isDirectory: true))
-        candidateDirectories.append(Bundle.module.bundleURL)
-
         var seen = Set<String>()
         var files: [URL] = []
-        for directory in candidateDirectories {
-            guard FileManager.default.fileExists(atPath: directory.path) else { continue }
+        for directory in AppResourceLocator.resourceBundleDirectories() {
             let possibleDirectories = [
                 directory.appendingPathComponent("Dictionaries", isDirectory: true),
                 directory

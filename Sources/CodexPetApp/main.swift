@@ -138,7 +138,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, PetContentViewDelegate
     }
 
     private func statusBarIcon() -> NSImage? {
-        guard let url = Bundle.module.url(forResource: "AppIcon", withExtension: "png"),
+        guard let url = AppResourceLocator.file(named: "AppIcon", extension: "png"),
               let image = NSImage(contentsOf: url) else {
             return nil
         }
