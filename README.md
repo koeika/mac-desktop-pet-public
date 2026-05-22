@@ -3,12 +3,12 @@
 macOS 桌宠应用：自定义宠物素材、AI 编程进度提醒、背单词互动复习。
 
 Native macOS desktop pet for AI coding progress and lightweight vocabulary review.
+<img width="1630" height="1148" alt="image" src="https://github.com/user-attachments/assets/0e902a75-2f35-4d08-8f49-6de8cf759d7c" />
+<img width="1371" height="1155" alt="image" src="https://github.com/user-attachments/assets/f053cd6f-9569-4189-bb4d-7e85eafff316" />
 
-![Pet management](docs/images/config-pets.svg)
-
-![Dictionary learning](docs/images/config-dictionaries.svg)
-
-![AI progress](docs/images/config-progress.svg)
+<img width="423" height="606" alt="image" src="https://github.com/user-attachments/assets/131bb611-00ee-496d-a1dc-08e99bab5e06" />
+<img width="1314" height="926" alt="9686b2e1233161bdc30baf8abf9b1d45" src="https://github.com/user-attachments/assets/b5b69230-f3a6-4f5b-b7bb-f62a325e5770" />
+<img width="322" height="530" alt="36ab8965642683cbd4829585ac859169" src="https://github.com/user-attachments/assets/12511adb-8d09-4870-9d50-87eb1df93301" />
 
 ## 功能概览
 
