@@ -1352,15 +1352,15 @@ struct ProgressConnectTab: View {
     let actions: SettingsActions
 
     private var progressCommand: String {
-        "swift run petctl progress --source codex --stage \"实现功能\" --message \"正在修改文件\" --progress 60"
+        "curl --silent --show-error -X POST http://127.0.0.1:\(store.settings.serverPort)/v1/progress -H 'content-type: application/json' -d '{\"source\":\"codex\",\"stage\":\"实现功能\",\"message\":\"正在修改文件\",\"progress\":60,\"status\":\"running\"}'"
     }
 
     private var doneCommand: String {
-        "swift run petctl done --source codex --stage \"完成\" --message \"任务完成\" --progress 100"
+        "curl --silent --show-error -X POST http://127.0.0.1:\(store.settings.serverPort)/v1/progress -H 'content-type: application/json' -d '{\"source\":\"codex\",\"stage\":\"完成\",\"message\":\"任务完成\",\"progress\":100,\"status\":\"done\"}'"
     }
 
     private var curlCommand: String {
-        "curl -X POST http://127.0.0.1:\(store.settings.serverPort)/v1/progress -H 'content-type: application/json' -d '{\"source\":\"codex\",\"stage\":\"验证\",\"message\":\"正在运行检查\",\"progress\":80}'"
+        "curl --silent --show-error -X POST http://127.0.0.1:\(store.settings.serverPort)/v1/progress -H 'content-type: application/json' -d '{\"source\":\"codex\",\"stage\":\"验证\",\"message\":\"正在运行检查\",\"progress\":80,\"status\":\"review\"}'"
     }
 
     var body: some View {
