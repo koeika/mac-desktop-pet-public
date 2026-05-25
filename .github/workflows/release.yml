@@ -77,6 +77,10 @@ jobs:
 
           cp README.md LICENSE "${dist_dir}/"
           cp -R examples "${dist_dir}/examples"
+          cp -R skills "${dist_dir}/skills"
+          mkdir -p "${dist_dir}/Scripts"
+          cp Scripts/install-codex-skill.sh "${dist_dir}/Scripts/install-codex-skill.sh"
+          chmod +x "${dist_dir}/Scripts/install-codex-skill.sh"
 
           cat > "${dist_dir}/INSTALL.md" <<'INSTALL'
           # Whisky&Cling 安装说明
@@ -97,6 +101,16 @@ jobs:
           ```
 
           `petctl` 需要在 `Whisky&Cling.app` 运行时使用。
+
+          ## 安装 Codex 自动上报 skill
+
+          只打开 App 不会让 Codex 自动上报会话进度。需要安装随包附带的 Codex skill：
+
+          ```bash
+          ./Scripts/install-codex-skill.sh
+          ```
+
+          安装后重启 Codex 或开启新会话。Codex 会在读取代码、实现、验证、完成、失败等节点向桌宠上报；完成事件会覆盖当前单词卡并显示完成气泡。
           INSTALL
 
           ditto -c -k --sequesterRsrc --keepParent "${dist_dir}" "dist/${dist_name}.zip"
@@ -110,4 +124,4 @@ jobs:
           asset="dist/whiskycolin-${version}-macos-arm64.zip"
           gh release create "${version}" "${asset}" \
             --title "Whisky&Cling ${version}" \
-            --notes "macOS 14+ release package. Includes Whisky&Cling.app, petctl, README, install notes, and dictionary import templates. This build uses ad-hoc signing and is not notarized."
+            --notes "macOS 14+ release package. Includes Whisky&Cling.app, petctl, Codex skill installer, README, install notes, and dictionary import templates. This build uses ad-hoc signing and is not notarized."

@@ -122,6 +122,14 @@ curl --silent --show-error -X POST http://127.0.0.1:4789/v1/progress \
 - `AGENTS.codex-pet.md`：适合复制到自己的 Codex 指令中。
 - `skills/codex-desktop-pet/SKILL.md`：适合安装为 Codex skill。
 
+如果是从 GitHub Release 下载的 zip，解压后先运行：
+
+```bash
+./Scripts/install-codex-skill.sh
+```
+
+只打开 `Whisky&Cling.app` 不会让 Codex 自动上报。安装 skill 并重启 Codex 或开启新会话后，Codex 才会在进度节点和会话完成时主动通知桌宠。
+
 默认使用本地 HTTP API，不需要配置本机源码路径。只有修改了端口时才需要设置环境变量：
 
 ```bash
