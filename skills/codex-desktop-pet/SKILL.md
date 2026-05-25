@@ -7,6 +7,8 @@ Use this skill whenever the local Whisky&Cling/Codex Desktop Pet app should refl
 
 Prefer the local HTTP API for routine Codex progress reporting. It avoids SwiftPM manifest and build-cache access, which can fail inside Codex's sandbox. Do not use `swift run` for routine reporting from Codex unless the HTTP API and a prebuilt `petctl` binary are unavailable.
 
+When running inside Codex Desktop, the normal command sandbox may fail to reach `127.0.0.1` even while Whisky&Cling is listening. If a reporting `curl` fails with connection refused, timeout, or no visible desktop feedback, immediately retry the same local HTTP call with escalated command permissions. Do not treat the app as stopped until an escalated `GET /v1/state` also fails.
+
 The app listens on `http://127.0.0.1:4789` by default. If the user changed the port, use `PET_SERVER_URL`, for example:
 
 ```bash
@@ -34,6 +36,6 @@ curl --silent --show-error -X POST "${PET_SERVER_URL:-http://127.0.0.1:4789}/v1/
 
 If HTTP is unavailable but a release package is available, call its prebuilt `bin/petctl` directly. Avoid `swift run` inside Codex sandbox because it may fail while reading `Package.swift` or SwiftPM caches.
 
-Before the final assistant message, call the `done` command after the work has actually completed. This dismisses any active vocabulary card and shows the completion bubble.
+Before the final assistant message, call the `done` HTTP event after the work has actually completed. In Codex Desktop this call should use escalated command permissions when needed, so it dismisses any active vocabulary card and shows the completion bubble reliably.
 
 Keep messages short and phase-based.
