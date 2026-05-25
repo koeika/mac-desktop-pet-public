@@ -445,17 +445,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, PetContentViewDelegate
     func markKnown() {
         guard let word = activeWord else { return }
         vocabularyQuestionTimer?.invalidate()
+        vocabularyQuestionTimer = nil
         store.vocabularyProgress.mark(dictionaryID: word.dictionaryID, term: word.entry.term, action: .known)
         store.saveLearningProgress()
-        setTemporaryAction(.waving, duration: 2.0)
-        contentView.showMessage(
-            kicker: "已学习",
-            title: word.entry.term,
-            body: "已标记为认识。之后它还会偶尔出现，但频率会降低。",
-            showActions: false,
-            footer: vocabularyFooterText()
-        )
+        setTemporaryAction(.waving, duration: 1.6)
         activeWord = nil
+        contentView.hideBubble(animated: true)
     }
 
     func markUnknown() {
@@ -472,17 +467,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, PetContentViewDelegate
     func skipWord() {
         guard let word = activeWord else { return }
         vocabularyQuestionTimer?.invalidate()
+        vocabularyQuestionTimer = nil
         store.vocabularyProgress.mark(dictionaryID: word.dictionaryID, term: word.entry.term, action: .skipped)
         store.saveLearningProgress()
         setTemporaryAction(.idle, duration: 0.8)
-        contentView.showMessage(
-            kicker: "已跳过",
-            title: word.entry.term,
-            body: "这个词后续出现频率会降低。",
-            showActions: false,
-            footer: vocabularyFooterText()
-        )
         activeWord = nil
+        contentView.hideBubble(animated: true)
     }
 
     func requestVocabularyNow() {
