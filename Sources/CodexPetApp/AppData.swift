@@ -26,6 +26,8 @@ struct AppSettings: Codable {
     var deepSeekBaseURL: String = "https://api.deepseek.com"
     var dailyVocabularyLimit: Int = 10
     var vocabularyWindowHours: Int = 6
+    var vocabularyStudyStartMinute: Int = VocabularyDisplayScheduler.defaultStudyStartMinute
+    var vocabularyStudyEndMinute: Int = VocabularyDisplayScheduler.defaultStudyEndMinute
     var vocabularyQuestionPersists: Bool = true
     var vocabularyWindowStartDate: Date?
     var vocabularyShownCountDate: String?
@@ -49,6 +51,8 @@ struct AppSettings: Codable {
         case deepSeekBaseURL
         case dailyVocabularyLimit
         case vocabularyWindowHours
+        case vocabularyStudyStartMinute
+        case vocabularyStudyEndMinute
         case vocabularyQuestionPersists
         case vocabularyWindowStartDate
         case vocabularyShownCountDate
@@ -76,6 +80,14 @@ struct AppSettings: Codable {
         vocabularyWindowHours = VocabularyDisplayScheduler.normalizedWindowHours(
             try container.decodeIfPresent(Int.self, forKey: .vocabularyWindowHours) ?? 6
         )
+        let studyWindow = VocabularyDisplayScheduler.normalizedStudyWindow(
+            startMinute: try container.decodeIfPresent(Int.self, forKey: .vocabularyStudyStartMinute)
+                ?? VocabularyDisplayScheduler.defaultStudyStartMinute,
+            endMinute: try container.decodeIfPresent(Int.self, forKey: .vocabularyStudyEndMinute)
+                ?? VocabularyDisplayScheduler.defaultStudyEndMinute
+        )
+        vocabularyStudyStartMinute = studyWindow.startMinute
+        vocabularyStudyEndMinute = studyWindow.endMinute
         vocabularyQuestionPersists = try container.decodeIfPresent(Bool.self, forKey: .vocabularyQuestionPersists) ?? true
         vocabularyWindowStartDate = try container.decodeIfPresent(Date.self, forKey: .vocabularyWindowStartDate)
         vocabularyShownCountDate = try container.decodeIfPresent(String.self, forKey: .vocabularyShownCountDate)
@@ -290,6 +302,13 @@ final class AppDataStore: ObservableObject {
         settings.movementSpeedMultiplier = min(max(settings.movementSpeedMultiplier, 0.1), 1.4)
         settings.dailyVocabularyLimit = VocabularyDisplayScheduler.normalizedDailyLimit(settings.dailyVocabularyLimit)
         settings.vocabularyWindowHours = VocabularyDisplayScheduler.normalizedWindowHours(settings.vocabularyWindowHours)
+        let studyWindow = VocabularyDisplayScheduler.normalizedStudyWindow(
+            startMinute: settings.vocabularyStudyStartMinute,
+            endMinute: settings.vocabularyStudyEndMinute
+        )
+        settings.vocabularyStudyStartMinute = studyWindow.startMinute
+        settings.vocabularyStudyEndMinute = studyWindow.endMinute
+        settings.vocabularyWindowStartDate = nil
         settings.vocabularyShownCount = max(0, settings.vocabularyShownCount)
         settings.petClickFeedbackPhrases = AppSettings.normalizedPetClickFeedbackPhrases(settings.petClickFeedbackPhrases)
         try? JSONFileStore.save(settings, to: settingsURL)
@@ -739,6 +758,32 @@ final class AppDataStore: ObservableObject {
         saveSettings()
     }
 
+    func setVocabularyStudyStartMinute(_ value: Int) {
+        let window = VocabularyDisplayScheduler.normalizedStudyWindow(
+            startMinute: value,
+            endMinute: settings.vocabularyStudyEndMinute
+        )
+        guard settings.vocabularyStudyStartMinute != window.startMinute
+            || settings.vocabularyStudyEndMinute != window.endMinute else { return }
+        objectWillChange.send()
+        settings.vocabularyStudyStartMinute = window.startMinute
+        settings.vocabularyStudyEndMinute = window.endMinute
+        saveSettings()
+    }
+
+    func setVocabularyStudyEndMinute(_ value: Int) {
+        let window = VocabularyDisplayScheduler.normalizedStudyWindow(
+            startMinute: settings.vocabularyStudyStartMinute,
+            endMinute: value
+        )
+        guard settings.vocabularyStudyStartMinute != window.startMinute
+            || settings.vocabularyStudyEndMinute != window.endMinute else { return }
+        objectWillChange.send()
+        settings.vocabularyStudyStartMinute = window.startMinute
+        settings.vocabularyStudyEndMinute = window.endMinute
+        saveSettings()
+    }
+
     func setVocabularyQuestionPersists(_ value: Bool) {
         guard settings.vocabularyQuestionPersists != value else { return }
         objectWillChange.send()
@@ -886,7 +931,9 @@ final class AppDataStore: ObservableObject {
                 questionPersists: settings.vocabularyQuestionPersists,
                 windowStartDate: settings.vocabularyWindowStartDate,
                 shownCountDate: settings.vocabularyShownCountDate,
-                shownCount: settings.vocabularyShownCount
+                shownCount: settings.vocabularyShownCount,
+                studyStartMinute: settings.vocabularyStudyStartMinute,
+                studyEndMinute: settings.vocabularyStudyEndMinute
             )
         }
         set {
@@ -897,6 +944,8 @@ final class AppDataStore: ObservableObject {
             settings.vocabularyWindowStartDate = normalized.windowStartDate
             settings.vocabularyShownCountDate = normalized.shownCountDate
             settings.vocabularyShownCount = normalized.shownCount
+            settings.vocabularyStudyStartMinute = normalized.studyStartMinute
+            settings.vocabularyStudyEndMinute = normalized.studyEndMinute
         }
     }
 
@@ -922,17 +971,16 @@ final class AppDataStore: ObservableObject {
 
     func vocabularyScheduleStatusText(now: Date = Date()) -> String {
         let snapshot = VocabularyDisplayScheduler.resetIfNeeded(vocabularyScheduleSnapshot, now: now)
-        guard let windowEnd = VocabularyDisplayScheduler.windowEndDate(snapshot) else {
-            return "今日窗口未开始 · \(snapshot.shownCount)/\(snapshot.dailyLimit)"
+        let window = VocabularyDisplayScheduler.studyWindowDates(snapshot, now: now)
+        let phase: String
+        if now < window.start {
+            phase = "未开始"
+        } else if now >= window.end {
+            phase = "已结束"
+        } else {
+            phase = "进行中"
         }
-        if now >= windowEnd {
-            return "今日窗口已结束 · \(snapshot.shownCount)/\(snapshot.dailyLimit)"
-        }
-        let minutes = max(1, Int(windowEnd.timeIntervalSince(now) / 60))
-        let hours = minutes / 60
-        let remainder = minutes % 60
-        let remaining = hours > 0 ? "\(hours)小时\(remainder)分钟" : "\(remainder)分钟"
-        return "窗口剩余 \(remaining) · \(snapshot.shownCount)/\(snapshot.dailyLimit)"
+        return "学习时段 \(VocabularyDisplayScheduler.timeText(for: snapshot.studyStartMinute))-\(VocabularyDisplayScheduler.timeText(for: snapshot.studyEndMinute)) · \(phase) · 今日 \(snapshot.shownCount)/\(snapshot.dailyLimit)"
     }
 
     func toggleDictionary(_ dictionaryID: String, isEnabled: Bool) {

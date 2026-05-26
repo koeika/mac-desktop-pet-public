@@ -382,8 +382,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, PetContentViewDelegate
     }
 
     private func scheduleNextAutomaticVocabulary(after date: Date) {
-        let limit = max(1, store.settings.dailyVocabularyLimit)
-        let interval = max(60, Double(store.settings.vocabularyWindowHours * 3600) / Double(limit))
+        let snapshot = VocabularyDisplayScheduler.resetIfNeeded(store.vocabularyScheduleSnapshot, now: date)
+        let remainingWords = max(1, snapshot.dailyLimit - snapshot.shownCount)
+        let remainingSeconds = VocabularyDisplayScheduler.secondsUntilStudyWindowEnd(snapshot, now: date)
+        let interval = max(60, remainingSeconds / Double(remainingWords))
         nextAutomaticVocabularyAt = date.addingTimeInterval(interval * Double.random(in: 0.75...1.25))
     }
 

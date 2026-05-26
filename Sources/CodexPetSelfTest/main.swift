@@ -340,29 +340,36 @@ struct CodexPetSelfTest {
     static func testVocabularyDisplaySchedule() {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(secondsFromGMT: 0)!
-        let dayOne = calendar.date(from: DateComponents(year: 2026, month: 5, day: 22, hour: 9))!
-        let dayTwo = dayOne.addingTimeInterval(86_400)
-        let start = dayOne.addingTimeInterval(3_600)
+        let beforeWindow = calendar.date(from: DateComponents(year: 2026, month: 5, day: 22, hour: 9, minute: 59))!
+        let windowStart = calendar.date(from: DateComponents(year: 2026, month: 5, day: 22, hour: 10))!
+        let inWindow = calendar.date(from: DateComponents(year: 2026, month: 5, day: 22, hour: 17, minute: 59))!
+        let windowEnd = calendar.date(from: DateComponents(year: 2026, month: 5, day: 22, hour: 18))!
+        let dayTwo = calendar.date(from: DateComponents(year: 2026, month: 5, day: 23, hour: 10))!
 
-        var snapshot = VocabularyDisplayScheduleSnapshot(dailyLimit: 3, windowHours: 6)
-        precondition(VocabularyDisplayScheduler.canShowAutomaticVocabulary(snapshot, now: dayOne, calendar: calendar))
+        var snapshot = VocabularyDisplayScheduleSnapshot(dailyLimit: 3)
+        precondition(!VocabularyDisplayScheduler.canShowAutomaticVocabulary(snapshot, now: beforeWindow, calendar: calendar))
+        precondition(VocabularyDisplayScheduler.canShowAutomaticVocabulary(snapshot, now: windowStart, calendar: calendar))
+        precondition(VocabularyDisplayScheduler.canShowAutomaticVocabulary(snapshot, now: inWindow, calendar: calendar))
+        precondition(!VocabularyDisplayScheduler.canShowAutomaticVocabulary(snapshot, now: windowEnd, calendar: calendar))
 
-        snapshot = VocabularyDisplayScheduler.recordAutomaticVocabularyShown(snapshot, now: start, calendar: calendar)
-        precondition(snapshot.windowStartDate == start)
+        snapshot = VocabularyDisplayScheduler.recordAutomaticVocabularyShown(snapshot, now: windowStart, calendar: calendar)
+        precondition(snapshot.windowStartDate == nil)
         precondition(snapshot.shownCount == 1)
-        precondition(VocabularyDisplayScheduler.canShowAutomaticVocabulary(snapshot, now: start.addingTimeInterval(60), calendar: calendar))
+        precondition(VocabularyDisplayScheduler.canShowAutomaticVocabulary(snapshot, now: windowStart.addingTimeInterval(60), calendar: calendar))
 
-        snapshot = VocabularyDisplayScheduler.recordAutomaticVocabularyShown(snapshot, now: start.addingTimeInterval(120), calendar: calendar)
-        snapshot = VocabularyDisplayScheduler.recordAutomaticVocabularyShown(snapshot, now: start.addingTimeInterval(240), calendar: calendar)
+        snapshot = VocabularyDisplayScheduler.recordAutomaticVocabularyShown(snapshot, now: windowStart.addingTimeInterval(120), calendar: calendar)
+        snapshot = VocabularyDisplayScheduler.recordAutomaticVocabularyShown(snapshot, now: windowStart.addingTimeInterval(240), calendar: calendar)
         precondition(snapshot.shownCount == 3)
-        precondition(!VocabularyDisplayScheduler.canShowAutomaticVocabulary(snapshot, now: start.addingTimeInterval(300), calendar: calendar))
+        precondition(!VocabularyDisplayScheduler.canShowAutomaticVocabulary(snapshot, now: windowStart.addingTimeInterval(300), calendar: calendar))
 
-        var expired = VocabularyDisplayScheduleSnapshot(dailyLimit: 10, windowHours: 6, windowStartDate: start, shownCountDate: VocabularyDisplayScheduler.todayKey(for: start, calendar: calendar), shownCount: 1)
-        precondition(!VocabularyDisplayScheduler.canShowAutomaticVocabulary(expired, now: start.addingTimeInterval(6 * 3600 + 1), calendar: calendar))
-
-        expired = VocabularyDisplayScheduler.resetIfNeeded(expired, now: dayTwo, calendar: calendar)
-        precondition(expired.shownCount == 0)
-        precondition(expired.windowStartDate == nil)
+        snapshot = VocabularyDisplayScheduler.resetIfNeeded(snapshot, now: dayTwo, calendar: calendar)
+        precondition(snapshot.shownCount == 0)
+        precondition(VocabularyDisplayScheduler.canShowAutomaticVocabulary(snapshot, now: dayTwo, calendar: calendar))
+        let invalidWindow = VocabularyDisplayScheduler.normalized(
+            VocabularyDisplayScheduleSnapshot(studyStartMinute: 18 * 60, studyEndMinute: 10 * 60)
+        )
+        precondition(invalidWindow.studyStartMinute == 10 * 60)
+        precondition(invalidWindow.studyEndMinute == 18 * 60)
         precondition(VocabularyDisplayScheduler.normalizedDailyLimit(100) == 50)
         precondition(VocabularyDisplayScheduler.normalizedDailyLimit(0) == 1)
     }

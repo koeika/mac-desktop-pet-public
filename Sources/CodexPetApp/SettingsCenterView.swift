@@ -842,7 +842,7 @@ struct DictionaryTab: View {
                     .foregroundStyle(.secondary)
             }
 
-            HStack(spacing: 16) {
+            HStack(alignment: .top, spacing: 16) {
                 Stepper(
                     value: Binding(
                         get: { store.settings.dailyVocabularyLimit },
@@ -859,20 +859,30 @@ struct DictionaryTab: View {
                     }
                 }
 
-                Stepper(
-                    value: Binding(
-                        get: { store.settings.vocabularyWindowHours },
-                        set: { store.setVocabularyWindowHours($0) }
-                    ),
-                    in: 1...12
-                ) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("学习窗口 \(store.settings.vocabularyWindowHours) 小时")
-                            .font(.subheadline.weight(.semibold))
-                        Text("从每天首次自动出词开始计算。")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("每天学习时段")
+                        .font(.subheadline.weight(.semibold))
+                    HStack(spacing: 8) {
+                        DatePicker(
+                            "开始",
+                            selection: Binding(
+                                get: { dateForMinute(store.settings.vocabularyStudyStartMinute) },
+                                set: { store.setVocabularyStudyStartMinute(minuteOfDay($0)) }
+                            ),
+                            displayedComponents: .hourAndMinute
+                        )
+                        DatePicker(
+                            "结束",
+                            selection: Binding(
+                                get: { dateForMinute(store.settings.vocabularyStudyEndMinute) },
+                                set: { store.setVocabularyStudyEndMinute(minuteOfDay($0)) }
+                            ),
+                            displayedComponents: .hourAndMinute
+                        )
                     }
+                    Text("默认 10:00-18:00；结束时间必须晚于开始时间。")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
 
                 Toggle(
@@ -887,6 +897,15 @@ struct DictionaryTab: View {
         }
         .padding(14)
         .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 14))
+    }
+
+    private func dateForMinute(_ minute: Int) -> Date {
+        Calendar.current.startOfDay(for: Date())
+            .addingTimeInterval(TimeInterval(VocabularyDisplayScheduler.normalizedMinuteOfDay(minute) * 60))
+    }
+
+    private func minuteOfDay(_ date: Date) -> Int {
+        VocabularyDisplayScheduler.minuteOfDay(for: date)
     }
 
     private var openAISettingsPanel: some View {
