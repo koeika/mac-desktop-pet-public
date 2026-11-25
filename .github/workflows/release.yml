@@ -11,7 +11,7 @@ permissions:
 jobs:
   build-macos:
     name: Build macOS release package
-    runs-on: macos-14
+    runs-on: macos-15
 
     steps:
       - name: Checkout
@@ -30,6 +30,7 @@ jobs:
           set -euo pipefail
 
           version="${GITHUB_REF_NAME}"
+          test "$(uname -m)" = arm64
           app_version="${version#v}"
           dist_name="whiskycolin-${version}-macos-arm64"
           dist_dir="dist/${dist_name}"
