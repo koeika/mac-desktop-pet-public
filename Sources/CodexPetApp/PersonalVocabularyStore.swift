@@ -57,7 +57,7 @@ extension AppDataStore {
             stats: vocabularyProgress.stats, capturedAt: capturedAt, now: now,
             newIntroducedToday: automatic ? settings.newVocabularyKeys.count : 0,
             newLimit: automatic ? settings.dailyNewVocabularyLimit : Int.max,
-            reserveNewSlot: settings.vocabularyShownCount % 4 == 0,
+            reserveNewSlot: settings.vocabularyShownCount % 4 == 3,
             introducedKeys: Set(settings.newVocabularyKeys)
         )
     }
