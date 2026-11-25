@@ -24,7 +24,11 @@ let package = Package(
             name: "CodexPetApp",
             dependencies: ["CodexPetCore"],
             resources: [
-                .process("Resources")
+                .process("Resources/Dictionaries"),
+                .process("Resources/AppIcon.png"),
+                .process("Resources/AppIcon.icns"),
+                .copy("Resources/Pets"),
+                .copy("Resources/Themes")
             ]
         ),
         .executableTarget(

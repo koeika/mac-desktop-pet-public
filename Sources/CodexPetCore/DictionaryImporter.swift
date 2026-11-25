@@ -75,6 +75,7 @@ public enum DictionaryImporter {
                 phonetic: header.firstIndex(of: "phonetic").map { cell(row, $0) }.nilIfBlank,
                 meaning: meaning,
                 example: header.firstIndex(of: "example").map { cell(row, $0) }.nilIfBlank,
+                exampleTranslation: header.firstIndex(of: "exampletranslation").map { cell(row, $0) }.nilIfBlank,
                 hint: header.firstIndex(of: "hint").map { cell(row, $0) }.nilIfBlank,
                 tags: header.firstIndex(of: "tags").map { cell(row, $0).split(separator: "|").map(String.init) } ?? []
             ))

@@ -22,3 +22,19 @@ export async function sendWord(word, config, fetcher = fetch) {
   if (!response.ok || body.ok !== true) throw new Error(body.error || "收藏失败（" + response.status + "）");
   return {offline: false, word: body.word};
 }
+
+export async function lookupWord(word, config, fetcher = fetch) {
+  const base = localEndpoint(config.endpoint);
+  if (!config.token?.trim()) throw new Error("先点工具栏里的 Whisky&Cling，完成一次桌宠配对。");
+  let response;
+  try {
+    response = await fetcher(base + "/v1/vocabulary/lookup", {
+      method: "POST", headers: {"content-type": "application/json", Authorization: "Bearer " + config.token.trim()},
+      body: JSON.stringify({word, allowAI: config.cloudLookup === true}),
+      signal: AbortSignal.timeout(65000), credentials: "omit"
+    });
+  } catch { return {offline: true, word}; }
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok || !body.ok) throw new Error(body.error || "查询失败，请重试。");
+  return {...body, offline: false};
+}

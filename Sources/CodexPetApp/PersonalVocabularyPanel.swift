@@ -35,7 +35,7 @@ struct PersonalVocabularyPanel: View {
                     NSPasteboard.general.setString(store.captureToken, forType: .string)
                     copied = true
                 }
-                Text("127.0.0.1:\(store.settings.serverPort)").font(.caption.monospaced()).foregroundStyle(.secondary)
+                Text("127.0.0.1:\(String(store.settings.serverPort))").font(.caption.monospaced()).foregroundStyle(.secondary)
                 Button("打开 Chrome 扩展文件夹") { openExtension() }
             }
             HStack {
@@ -83,6 +83,7 @@ struct PersonalVocabularyPanel: View {
                             Text(word.entry.phonetic ?? "").font(.caption).foregroundStyle(.secondary)
                             Text(word.content.meaning.isEmpty ? "待补充释义" : word.content.meaning).lineLimit(3)
                             if let sentence = word.entry.example { Text(sentence).font(.caption).lineLimit(3) }
+                            if let translation = word.entry.exampleTranslation { Text(translation).font(.caption).foregroundStyle(.secondary).lineLimit(3) }
                             HStack {
                                 Text(nextReviewText(word)).font(.caption).foregroundStyle(.secondary)
                                 Spacer()

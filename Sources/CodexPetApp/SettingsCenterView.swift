@@ -24,7 +24,7 @@ final class SettingsWindowController {
         let hostingController = NSHostingController(rootView: rootView)
         window = NSWindow(contentViewController: hostingController)
         window.title = "\(AppBrand.displayName) 配置中心"
-        window.setContentSize(NSSize(width: 980, height: 720))
+        window.setContentSize(NSSize(width: 1120, height: 800))
         window.minSize = NSSize(width: 880, height: 620)
         window.styleMask = [.titled, .closable, .miniaturizable, .resizable]
         window.center()
@@ -40,6 +40,15 @@ struct SettingsCenterView: View {
     @ObservedObject var store: AppDataStore
     let actions: SettingsActions
     @State private var selection: SettingsTab = .pets
+    @FocusState private var focusedTab: SettingsTab?
+    @State private var themeError: String?
+    private var theme: AppVisualTheme { store.settings.visualTheme }
+
+    init(store: AppDataStore, actions: SettingsActions, initialTab: SettingsTab = .pets) {
+        self.store = store
+        self.actions = actions
+        _selection = State(initialValue: initialTab)
+    }
 
     var body: some View {
         HStack(spacing: 0) {
@@ -48,15 +57,26 @@ struct SettingsCenterView: View {
             content
         }
         .frame(minWidth: 880, minHeight: 620)
-        .background(Color(nsColor: .windowBackgroundColor))
+        .background(theme.paper)
+        .foregroundStyle(theme.ink)
+        .tint(theme.accent)
+        .environment(\.companionTheme, theme)
+        .preferredColorScheme(.light)
+        .alert("主题未保存", isPresented: Binding(get: { themeError != nil }, set: { if !$0 { themeError = nil } })) {
+            Button("知道了", role: .cancel) { themeError = nil }
+        } message: { Text(themeError ?? "") }
     }
 
     private var sidebar: some View {
         VStack(alignment: .leading, spacing: 18) {
             VStack(alignment: .leading, spacing: 5) {
-                Text(AppBrand.displayName)
-                    .font(.system(size: 24, weight: .bold, design: .rounded))
-                Text("配置宠物、词典和 AI 进度接入")
+                Image(systemName: "pawprint")
+                    .font(.system(size: 28, weight: .medium))
+                    .padding(.bottom, 12)
+                Text("Whisky\n& Cling")
+                    .font(.system(size: 27, weight: .heavy, design: .rounded))
+                    .lineSpacing(0)
+                Text("桌面上的小伙伴")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
@@ -71,10 +91,30 @@ struct SettingsCenterView: View {
             Spacer()
 
             VStack(alignment: .leading, spacing: 8) {
+                Label("主题样式", systemImage: "paintpalette")
+                    .font(.caption.weight(.semibold))
+                Picker("主题样式", selection: Binding(
+                    get: { store.settings.visualTheme },
+                    set: { value in
+                        do { try store.selectVisualTheme(value) }
+                        catch { themeError = error.localizedDescription }
+                    }
+                )) {
+                    ForEach(AppVisualTheme.allCases) { value in
+                        Text(value.title).tag(value)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .accessibilityLabel("主题样式")
+            }
+            .padding(.bottom, 8)
+
+            VStack(alignment: .leading, spacing: 8) {
                 Text("本地服务")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
-                Text("127.0.0.1:\(store.settings.serverPort)")
+                Text("127.0.0.1:\(String(store.settings.serverPort))")
                     .font(.system(.body, design: .monospaced))
                     .padding(.horizontal, 10)
                     .padding(.vertical, 7)
@@ -82,17 +122,8 @@ struct SettingsCenterView: View {
             }
         }
         .padding(.horizontal, 18)
-        .frame(width: 230)
-        .background(
-            LinearGradient(
-                colors: [
-                    Color(nsColor: .controlBackgroundColor),
-                    Color(nsColor: .windowBackgroundColor)
-                ],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-        )
+        .frame(width: 190)
+        .background(theme.wash)
     }
 
     private var content: some View {
@@ -127,9 +158,12 @@ struct SettingsCenterView: View {
                 Spacer()
             }
             .padding(12)
-            .background(selection == tab ? Color.accentColor.opacity(0.16) : Color.clear, in: RoundedRectangle(cornerRadius: 10))
+            .foregroundStyle(selection == tab ? Color.white : theme.ink)
+            .background(selection == tab ? theme.accent : Color.clear, in: RoundedRectangle(cornerRadius: 7))
         }
         .buttonStyle(.plain)
+        .focused($focusedTab, equals: tab)
+        .focusEffectDisabled()
     }
 }
 
@@ -164,6 +198,7 @@ enum SettingsTab: CaseIterable {
 }
 
 struct PetGalleryTab: View {
+    @Environment(\.companionTheme) private var theme
     @ObservedObject var store: AppDataStore
     let actions: SettingsActions
     @State private var installURLText = ""
@@ -175,24 +210,30 @@ struct PetGalleryTab: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
-                sectionHeader("宠物管理", subtitle: "上传图片/GIF/视频，从在线链接安装 Codex pet，或导入已解压的宠物包。")
+                sectionHeader("宠物管理", subtitle: "今天，也一起待在桌面吧。")
 
-                HStack(alignment: .top, spacing: 18) {
-                    heroPreview
-                    VStack(spacing: 12) {
-                        PrimaryActionButton(title: "上传宠物素材", systemImage: "photo.badge.plus", action: actions.uploadPhotos)
-                        speedPanel
-                        urlInstallPanel
-                        SecondaryActionButton(title: "导入 Codex pet 包", systemImage: "folder.badge.plus", action: actions.importPetPackage)
-                        SecondaryActionButton(title: "随机预览一次", systemImage: "shuffle", action: actions.randomPreview)
-                    }
-                    .frame(width: 260)
+                heroPreview
+
+                HStack(spacing: 10) {
+                    PrimaryActionButton(title: "上传素材", systemImage: "photo.badge.plus", action: actions.uploadPhotos)
+                    SecondaryActionButton(title: "导入宠物包", systemImage: "folder.badge.plus", action: actions.importPetPackage)
+                    SecondaryActionButton(title: "随机见一面", systemImage: "shuffle", action: actions.randomPreview)
+                }
+
+                Divider().padding(.vertical, 6)
+                HStack(alignment: .top, spacing: 24) {
+                    speedPanel.frame(maxWidth: .infinity)
+                    urlInstallPanel.frame(maxWidth: .infinity)
                 }
 
                 clickFeedbackPanel
 
-                Text("宠物库")
-                    .font(.headline)
+                HStack {
+                    Text("我的小伙伴").font(.system(size: 19, weight: .bold, design: .rounded))
+                    Spacer()
+                    Text("\(store.enabledPets().count) 只已启用 · \(store.pets.count) 只收藏")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
 
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: 210), spacing: 14)], spacing: 14) {
                     ForEach(store.pets) { pet in
@@ -207,6 +248,7 @@ struct PetGalleryTab: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.trailing, 4)
         }
+        .scrollIndicators(.visible)
         .sheet(item: $installPreview) { preview in
             InstallPreviewSheet(
                 store: store,
@@ -264,7 +306,7 @@ struct PetGalleryTab: View {
             }
         }
         .padding(12)
-        .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 14))
+        .background(theme.wash, in: RoundedRectangle(cornerRadius: 7))
     }
 
     private var clickFeedbackPanel: some View {
@@ -313,8 +355,7 @@ struct PetGalleryTab: View {
             .buttonStyle(.borderless)
             .disabled(store.settings.petClickFeedbackPhrases.count >= 5)
         }
-        .padding(14)
-        .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 14))
+        .padding(.vertical, 14)
     }
 
     private var speedPanel: some View {
@@ -338,8 +379,7 @@ struct PetGalleryTab: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
-        .padding(12)
-        .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 14))
+        .padding(.vertical, 12)
     }
 
     private func prepareInstall() {
@@ -378,64 +418,50 @@ struct PetGalleryTab: View {
     }
 
     private var heroPreview: some View {
-        HStack(spacing: 20) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 24)
-                    .fill(
-                        LinearGradient(
-                            colors: [Color.cyan.opacity(0.18), Color.indigo.opacity(0.12), Color.orange.opacity(0.12)],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-                RoundedRectangle(cornerRadius: 24)
-                    .stroke(Color.white.opacity(0.45), lineWidth: 1)
-                if let pet = store.enabledPets().first ?? store.pets.first,
-                   let image = store.previewImage(for: pet) {
-                    Image(nsImage: image)
-                        .resizable()
-                        .scaledToFit()
-                        .padding(22)
-                        .shadow(color: .black.opacity(0.18), radius: 14, y: 8)
-                } else {
-                    PixelPetPreview()
-                        .frame(width: 120, height: 120)
-                }
-                Ellipse()
-                    .fill(Color.black.opacity(0.12))
-                    .frame(width: 150, height: 18)
-                    .offset(y: 82)
-            }
-            .frame(width: 260, height: 210)
-
-            VStack(alignment: .leading, spacing: 10) {
-                Text("当前会随机出现")
-                    .font(.caption.weight(.semibold))
+        HStack(spacing: 24) {
+            CompanionDuo(store: store).frame(maxWidth: .infinity)
+            VStack(alignment: .leading, spacing: 16) {
+                Text(theme == .storybook ? "绘本里的小伙伴" : "漫画里的小伙伴").font(.system(size: 22, weight: .heavy, design: .rounded))
+                Text("Whisky & Cling")
+                    .font(.system(size: 13, weight: .medium, design: .monospaced))
                     .foregroundStyle(.secondary)
-                Text("\(store.enabledPets().count) 只已启用宠物")
-                    .font(.system(size: 28, weight: .bold, design: .rounded))
-                Text("权重越高，宠物越常出现。GIF/视频会循环播放；静态照片拟真有限。")
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            Spacer()
+                Button("彩色漫画") { selectStyle(.color) }
+                    .buttonStyle(InkButtonStyle(primary: true))
+                Button("黑白手绘") { selectStyle(.ink) }
+                    .buttonStyle(InkButtonStyle())
+                Button("写实原版") { selectStyle(.original) }
+                    .buttonStyle(InkButtonStyle())
+            }.frame(width: 205, alignment: .leading)
         }
-        .padding(18)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 22))
+        .padding(.vertical, 18)
+    }
+
+    private func selectStyle(_ style: CompanionStyle) {
+        do {
+            try store.selectCompanionStyle(style)
+            actions.randomPreview()
+        } catch {
+            installError = error.localizedDescription
+        }
     }
 }
 
 struct PetCard: View {
+    @Environment(\.companionTheme) private var theme
     @ObservedObject var store: AppDataStore
     let pet: PetAsset
+    @State private var action: CodexPetAction = .idle
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             ZStack(alignment: .bottomTrailing) {
-                RoundedRectangle(cornerRadius: 18)
-                    .fill(Color(nsColor: .controlBackgroundColor))
-                    .frame(height: 128)
-                if let image = store.previewImage(for: pet) {
+                RoundedRectangle(cornerRadius: 6)
+                    .fill(theme.wash)
+                    .frame(height: 150)
+                if pet.kind == .codexPackage, let renderer = store.spriteRenderer(for: pet) {
+                    CompanionAnimation(renderer: renderer, action: action)
+                        .padding(10).frame(height: 150).frame(maxWidth: .infinity)
+                } else if let image = store.previewImage(for: pet) {
                     Image(nsImage: image)
                         .resizable()
                         .scaledToFit()
@@ -447,7 +473,7 @@ struct PetCard: View {
                     .font(.caption2.weight(.bold))
                     .padding(.horizontal, 8)
                     .padding(.vertical, 5)
-                    .background(.thinMaterial, in: Capsule())
+                    .background(theme.paper, in: RoundedRectangle(cornerRadius: 4))
                     .padding(10)
             }
 
@@ -461,8 +487,10 @@ struct PetCard: View {
             ))
             .toggleStyle(.switch)
 
-            if pet.kind == .codexPackage, let renderer = store.spriteRenderer(for: pet) {
-                ActionPreviewStrip(renderer: renderer)
+            if pet.kind == .codexPackage {
+                Picker("预览动作", selection: $action) {
+                    ForEach(CodexPetAction.allCases) { item in Text(item.chineseName).tag(item) }
+                }.pickerStyle(.menu)
             } else if pet.kind == .photo {
                 Text("静态照片拟真有限；建议上传 GIF/视频或安装 Codex pet 包。")
                     .font(.caption2)
@@ -501,8 +529,8 @@ struct PetCard: View {
             }
         }
         .padding(14)
-        .background(Color(nsColor: .windowBackgroundColor), in: RoundedRectangle(cornerRadius: 18))
-        .overlay(RoundedRectangle(cornerRadius: 18).stroke(Color.black.opacity(0.08)))
+        .background(theme.paper, in: RoundedRectangle(cornerRadius: 7))
+        .overlay(RoundedRectangle(cornerRadius: 7).stroke(theme == .comic ? theme.ink : theme.line, lineWidth: 1.2))
     }
 }
 
@@ -678,12 +706,16 @@ struct DictionaryTab: View {
             VStack(alignment: .leading, spacing: 18) {
                 sectionHeader("词典学习", subtitle: "导入 CSV/JSON 或可复制文本 PDF，确认后启用词典。")
 
-                HStack(spacing: 12) {
-                    PrimaryActionButton(title: "导入 CSV/JSON 词典", systemImage: "square.and.arrow.down", action: actions.importDictionary)
+                HStack(spacing: 10) {
+                    PrimaryActionButton(title: "导入 CSV/JSON", systemImage: "square.and.arrow.down", action: actions.importDictionary)
                     PrimaryActionButton(title: isImportingPDF ? "PDF 解析中..." : "导入 PDF 词典", systemImage: "doc.richtext", action: importPDFDictionary)
-                    SecondaryActionButton(title: "打开 CSV 模板", systemImage: "tablecells", action: actions.openCSVTemplate)
-                    SecondaryActionButton(title: "打开 JSON 模板", systemImage: "curlybraces", action: actions.openJSONTemplate)
-                    SecondaryActionButton(title: "查看导入格式", systemImage: "questionmark.circle", action: actions.showImportFormat)
+                    Menu {
+                        Button("打开 CSV 模板", action: actions.openCSVTemplate)
+                        Button("打开 JSON 模板", action: actions.openJSONTemplate)
+                        Button("查看导入格式", action: actions.showImportFormat)
+                    } label: {
+                        Label("模板与格式", systemImage: "doc.text")
+                    }.frame(maxWidth: .infinity)
                 }
 
                 learningPacePanel
@@ -730,6 +762,7 @@ struct DictionaryTab: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.trailing, 4)
         }
+        .scrollIndicators(.visible)
         .sheet(item: $pdfDraft) { draft in
             DictionaryDraftSheet(
                 initialDraft: draft,
@@ -783,8 +816,8 @@ struct DictionaryTab: View {
                 .padding(.vertical, 1)
             }
         }
-        .padding(14)
-        .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 14))
+        .padding(.vertical, 14)
+        .overlay(alignment: .bottom) { Divider() }
     }
 
     private var filteredDictionarySummaries: [DictionarySummary] {
@@ -897,8 +930,8 @@ struct DictionaryTab: View {
                 .toggleStyle(.switch)
             }
         }
-        .padding(14)
-        .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 14))
+        .padding(.vertical, 14)
+        .overlay(alignment: .bottom) { Divider() }
     }
 
     private func dateForMinute(_ minute: Int) -> Date {
@@ -971,8 +1004,8 @@ struct DictionaryTab: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
-        .padding(14)
-        .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 14))
+        .padding(.vertical, 14)
+        .overlay(alignment: .bottom) { Divider() }
     }
 
     private var apiKeyPlaceholder: String {
@@ -1000,7 +1033,7 @@ struct DictionaryTab: View {
         case .openAI:
             return "OpenAI 使用 Responses API + 结构化输出；只发送单词、释义、读音/音标和少量上下文。"
         case .deepSeek:
-            return "DeepSeek 使用 OpenAI-compatible Chat Completions + JSON 输出；默认模型 deepseek-chat，默认 Base URL https://api.deepseek.com。"
+            return "DeepSeek 使用 OpenAI-compatible Chat Completions + JSON 输出；默认模型 deepseek-flash，默认 Base URL https://api.deepseek.com。"
         }
     }
 
@@ -1235,6 +1268,7 @@ struct DraftEntryRow: View {
 }
 
 struct DictionaryCard: View {
+    @Environment(\.companionTheme) private var theme
     @ObservedObject var store: AppDataStore
     let summary: DictionarySummary
     @State private var isEditing = false
@@ -1265,15 +1299,15 @@ struct DictionaryCard: View {
                     .font(.caption2.weight(.semibold))
                     .padding(.horizontal, 8)
                     .padding(.vertical, 4)
-                    .background(Color.green.opacity(0.12), in: Capsule())
-                    .foregroundStyle(.green)
+                    .background(theme.wash, in: RoundedRectangle(cornerRadius: 4))
+                    .foregroundStyle(theme.ink)
                 if summary.isBuiltIn {
                     Text("内置")
                         .font(.caption2.weight(.semibold))
                         .padding(.horizontal, 8)
                         .padding(.vertical, 4)
-                        .background(Color.blue.opacity(0.10), in: Capsule())
-                        .foregroundStyle(.blue)
+                        .background(theme.wash, in: RoundedRectangle(cornerRadius: 4))
+                        .foregroundStyle(.secondary)
                 }
             }
             if let description = summary.pack.description {
@@ -1336,8 +1370,8 @@ struct DictionaryCard: View {
             }
         }
         .padding(16)
-        .background(Color(nsColor: .windowBackgroundColor), in: RoundedRectangle(cornerRadius: 18))
-        .overlay(RoundedRectangle(cornerRadius: 18).stroke(Color.black.opacity(0.08)))
+        .background(theme.paper, in: RoundedRectangle(cornerRadius: 7))
+        .overlay(RoundedRectangle(cornerRadius: 7).stroke(theme.line))
         .confirmationDialog("删除词典？", isPresented: $confirmDelete) {
             Button("删除 \(summary.pack.name)", role: .destructive) {
                 deleteDictionary()
@@ -1416,6 +1450,7 @@ struct ProgressConnectTab: View {
 }
 
 struct CopyCommandCard: View {
+    @Environment(\.companionTheme) private var theme
     let title: String
     let command: String
     @State private var copied = false
@@ -1440,8 +1475,8 @@ struct CopyCommandCard: View {
                 .background(Color.black.opacity(0.06), in: RoundedRectangle(cornerRadius: 10))
         }
         .padding(16)
-        .background(Color(nsColor: .windowBackgroundColor), in: RoundedRectangle(cornerRadius: 18))
-        .overlay(RoundedRectangle(cornerRadius: 18).stroke(Color.black.opacity(0.08)))
+        .background(theme.paper, in: RoundedRectangle(cornerRadius: 7))
+        .overlay(RoundedRectangle(cornerRadius: 7).stroke(theme.line))
     }
 }
 
@@ -1454,10 +1489,8 @@ struct PrimaryActionButton: View {
         Button(action: action) {
             Label(title, systemImage: systemImage)
                 .frame(maxWidth: .infinity)
-                .padding(.vertical, 8)
         }
-        .buttonStyle(.borderedProminent)
-        .controlSize(.large)
+        .buttonStyle(InkButtonStyle(primary: true))
     }
 }
 
@@ -1470,14 +1503,13 @@ struct SecondaryActionButton: View {
         Button(action: action) {
             Label(title, systemImage: systemImage)
                 .frame(maxWidth: .infinity)
-                .padding(.vertical, 8)
         }
-        .buttonStyle(.bordered)
-        .controlSize(.large)
+        .buttonStyle(InkButtonStyle())
     }
 }
 
 struct StatPill: View {
+    @Environment(\.companionTheme) private var theme
     let label: String
     let value: Int
     let color: Color
@@ -1492,11 +1524,12 @@ struct StatPill: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 8)
-        .background(color.opacity(0.12), in: RoundedRectangle(cornerRadius: 10))
+        .background(theme.wash, in: RoundedRectangle(cornerRadius: 5))
     }
 }
 
 struct StatusCard: View {
+    @Environment(\.companionTheme) private var theme
     let title: String
     let value: String
     let icon: String
@@ -1518,8 +1551,8 @@ struct StatusCard: View {
         }
         .padding(16)
         .frame(maxWidth: .infinity)
-        .background(Color(nsColor: .windowBackgroundColor), in: RoundedRectangle(cornerRadius: 18))
-        .overlay(RoundedRectangle(cornerRadius: 18).stroke(Color.black.opacity(0.08)))
+        .background(theme.paper, in: RoundedRectangle(cornerRadius: 7))
+        .overlay(RoundedRectangle(cornerRadius: 7).stroke(theme.line))
     }
 }
 

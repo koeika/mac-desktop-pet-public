@@ -14,6 +14,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, PetContentViewDelegate
     private var activePet: PetAsset?
     private var activeWord: ScopedDictionaryEntry?
     private var vocabularyAnswerRevealed = false
+    private var exampleTranslationTask: Task<Void, Never>?
+    private var exampleTranslationStatus: String?
     private var progressPriorityUntil = Date.distantPast
     private var queuedVocabulary = false
     private var behaviorEngine = PetBehaviorEngine()
@@ -44,8 +46,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, PetContentViewDelegate
         startLogWatcher()
         startTimers()
         chooseRandomPet()
-        if store.pets.isEmpty {
+        let welcomeURL = store.rootURL.appendingPathComponent("companion-welcome-seen")
+        if CommandLine.arguments.contains("--settings") || !FileManager.default.fileExists(atPath: welcomeURL.path) {
             showSettingsCenter()
+            try? Data().write(to: welcomeURL, options: .atomic)
         }
     }
 
@@ -54,6 +58,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, PetContentViewDelegate
         store.saveSettings()
         httpServer?.stop()
         logWatcher.stop()
+    }
+
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        showSettingsCenter()
+        return false
     }
 
     private func setupWindow() {
@@ -77,14 +86,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, PetContentViewDelegate
         window.level = .floating
         window.collectionBehavior = [.canJoinAllSpaces]
         window.hidesOnDeactivate = false
+        window.becomesKeyOnlyIfNeeded = true
         window.isReleasedWhenClosed = false
 
         contentView = PetContentView(frame: NSRect(origin: .zero, size: size))
         contentView.delegate = self
         contentView.canDragWindow = !store.settings.positionLocked
+        contentView.applyTheme(store.settings.visualTheme)
+        NotificationCenter.default.addObserver(self, selector: #selector(applyVisualTheme), name: .companionThemeDidChange, object: store)
         window.contentView = contentView
         window.orderFrontRegardless()
         behaviorEngine.snap(to: window.frame.origin)
+    }
+
+    @objc private func applyVisualTheme() {
+        contentView.applyTheme(store.settings.visualTheme)
     }
 
     private func visibleWindowOrigin(savedOrigin: CGPoint?, fallbackOrigin: CGPoint, size: NSSize) -> CGPoint {
@@ -141,6 +157,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, PetContentViewDelegate
         menu.addItem(NSMenuItem.separator())
         menu.addItem(NSMenuItem(title: "退出", action: #selector(quit), keyEquivalent: "q"))
         statusItem.menu = menu
+        let mainMenu = NSMenu()
+        let applicationItem = NSMenuItem(title: AppBrand.displayName, action: nil, keyEquivalent: "")
+        let applicationMenu = NSMenu()
+        let settingsItem = NSMenuItem(title: "配置中心…", action: #selector(showSettingsCenter), keyEquivalent: ",")
+        settingsItem.target = self
+        applicationMenu.addItem(settingsItem)
+        let wordItem = NSMenuItem(title: "现在抽一个词", action: #selector(wordNow), keyEquivalent: "n")
+        wordItem.target = self
+        applicationMenu.addItem(wordItem)
+        applicationMenu.addItem(.separator())
+        let quitItem = NSMenuItem(title: "退出 \(AppBrand.displayName)", action: #selector(quit), keyEquivalent: "q")
+        quitItem.target = self
+        applicationMenu.addItem(quitItem)
+        applicationItem.submenu = applicationMenu
+        mainMenu.addItem(applicationItem)
+        NSApp.mainMenu = mainMenu
     }
 
     private func statusBarIcon() -> NSImage? {
@@ -168,6 +200,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, PetContentViewDelegate
                     guard let self else { throw CaptureError.invalid("桌宠已退出。") }
                     return try self.store.handleVocabularyRequest(method: method, body: body)
                 }
+            },
+            lookupHandler: { [weak self] body in
+                guard let self else { throw CaptureError.invalid("桌宠已退出。") }
+                return try await self.store.lookupVocabulary(body)
             }
         )
         do {
@@ -214,7 +250,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, PetContentViewDelegate
         let preferredAction = Date() < temporaryActionUntil ? temporaryAction : nil
 
         guard window.isVisible else { return }
-        if store.settings.walkingPaused || store.settings.positionLocked {
+        if store.settings.walkingPaused || store.settings.positionLocked || contentView.isBubbleVisible {
             behaviorEngine.snap(to: window.frame.origin)
             contentView.setPetAction(preferredAction ?? .idle)
             return
@@ -320,19 +356,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, PetContentViewDelegate
         }
         vocabularyQuestionTimer?.invalidate()
         activeWord = selected
+        exampleTranslationStatus = nil
         vocabularyAnswerRevealed = !store.settings.vocabularyRecallMode
         store.recordVocabularyPresentation(selected, automatic: isAutomatic)
         chooseRandomPet()
         setTemporaryAction(.jumping, duration: 1.2)
 
-        contentView.showMessage(
-            kicker: selected.dictionaryName,
-            title: selected.entry.term,
-            body: vocabularyAnswerRevealed ? vocabularyCardBody(for: selected) : vocabularyPromptBody(for: selected),
-            showActions: true,
-            footer: vocabularyFooterText()
-        )
-        configureVocabularyControls(for: selected)
+        renderVocabularyCard(selected)
+        if vocabularyAnswerRevealed { completeExampleTranslation(selected) }
         if !store.settings.vocabularyQuestionPersists {
             vocabularyQuestionTimer = Timer.scheduledTimer(withTimeInterval: 22, repeats: false) { [weak self] _ in
                 self?.clearActiveVocabularyQuestion()
@@ -357,12 +388,52 @@ final class AppDelegate: NSObject, NSApplicationDelegate, PetContentViewDelegate
             hard: store.reviewPreview(word, action: .hard))
     }
 
+    private func renderVocabularyCard(_ word: ScopedDictionaryEntry) {
+        contentView.showVocabularyCard(kicker: word.dictionaryName, title: word.entry.term,
+            prompt: vocabularyPromptBody(for: word), answer: vocabularyCardBody(for: word),
+            revealed: vocabularyAnswerRevealed, footer: vocabularyFooterText(),
+            known: store.reviewPreview(word, action: .known), unknown: store.reviewPreview(word, action: .unknown),
+            hard: store.reviewPreview(word, action: .hard))
+    }
+
+    private func completeExampleTranslation(_ word: ScopedDictionaryEntry) {
+        exampleTranslationTask?.cancel()
+        guard word.entry.exampleTranslation == nil, let sentence = word.entry.example,
+              sentence.range(of: "[一-龯]", options: .regularExpression) == nil ||
+                sentence.range(of: "[ぁ-んァ-ン]", options: .regularExpression) != nil else { return }
+        let key = word.statKey + "|" + sentence
+        let cacheURL = store.rootURL.appendingPathComponent("example-translations.json")
+        var cache = JSONFileStore.load([String: String].self, from: cacheURL, fallback: [:])
+        if let translation = cache[key] {
+            activeWord?.entry.exampleTranslation = translation
+            if let activeWord { renderVocabularyCard(activeWord) }
+            return
+        }
+        guard KeychainStore.readExampleAPIKey(provider: .deepSeek) != nil else { return }
+        exampleTranslationStatus = "译文补全中…"
+        exampleTranslationTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            do {
+                guard let translation = try await store.translatedExample(for: word.entry), !Task.isCancelled else { return }
+                cache = JSONFileStore.load([String: String].self, from: cacheURL, fallback: [:])
+                cache[key] = translation
+                try JSONFileStore.save(cache, to: cacheURL)
+                guard activeWord?.statKey == word.statKey, activeWord?.entry.example == sentence else { return }
+                activeWord?.entry.exampleTranslation = translation
+                if vocabularyAnswerRevealed, let activeWord { renderVocabularyCard(activeWord) }
+            } catch {
+                guard !Task.isCancelled, activeWord?.statKey == word.statKey else { return }
+                exampleTranslationStatus = "译文暂未加载，下次复习会重试。"
+                if let activeWord, vocabularyAnswerRevealed { renderVocabularyCard(activeWord) }
+            }
+        }
+    }
+
     func revealVocabularyAnswer() {
         guard let word = activeWord, !vocabularyAnswerRevealed else { return }
         vocabularyAnswerRevealed = true
-        contentView.showMessage(kicker: word.dictionaryName, title: word.entry.term,
-            body: vocabularyCardBody(for: word), showActions: true, footer: vocabularyFooterText())
-        configureVocabularyControls(for: word)
+        renderVocabularyCard(word)
+        completeExampleTranslation(word)
     }
 
     private func vocabularyCardBody(for word: ScopedDictionaryEntry) -> String {
@@ -380,20 +451,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate, PetContentViewDelegate
 
         let meaning = cleanVocabularyField(word.entry.meaning)
         if !meaning.isEmpty {
-            sections.append("[释义]\n\(meaning)")
+            sections.append(meaning)
         } else {
             sections.append("[释义]\n还没有释义，可以在词典管理里补充。")
         }
 
         if let example = cleanOptionalVocabularyField(word.entry.example) {
-            sections.append("[例句]\n\(example)")
+            sections.append(example)
+            if let translation = cleanOptionalVocabularyField(word.entry.exampleTranslation) {
+                sections.append(translation)
+            } else {
+                sections.append(exampleTranslationStatus ?? "译文暂缺")
+            }
         }
 
         if let hint = cleanOptionalVocabularyField(word.entry.hint) {
             sections.append("[提示]\n\(hint)")
         }
 
-        return sections.joined(separator: "\n\n")
+        return sections.joined(separator: "\n")
     }
 
     private func cleanOptionalVocabularyField(_ value: String?) -> String? {
@@ -426,6 +502,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, PetContentViewDelegate
     }
 
     private func clearActiveVocabularyQuestion() {
+        exampleTranslationTask?.cancel()
         vocabularyQuestionTimer?.invalidate()
         vocabularyQuestionTimer = nil
         activeWord = nil
@@ -740,6 +817,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, PetContentViewDelegate
 }
 
 let app = NSApplication.shared
+if CommandLine.arguments.contains("--self-test-enrichment") {
+    Task { @MainActor in
+        do { try await NotebookRegression.runEnrichment(); exit(0) }
+        catch { fputs("enrichment-regression failed: \(error)\n", stderr); exit(1) }
+    }
+    app.run()
+    exit(1)
+}
 if CommandLine.arguments.contains("--self-test-notebook") {
     do { try MainActor.assumeIsolated { try NotebookRegression.run() } }
     catch { fputs("notebook-regression failed: \(error)\n", stderr); exit(1) }

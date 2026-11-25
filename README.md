@@ -3,15 +3,12 @@
 macOS 桌宠应用：自定义宠物素材、AI 编程进度提醒、背单词互动复习。
 
 Native macOS desktop pet for AI coding progress and lightweight vocabulary review.
-<img width="1630" height="1148" alt="image" src="https://github.com/user-attachments/assets/0e902a75-2f35-4d08-8f49-6de8cf759d7c" />
-<img width="1371" height="1155" alt="image" src="https://github.com/user-attachments/assets/f053cd6f-9569-4189-bb4d-7e85eafff316" />
 
-<img width="423" height="606" alt="image" src="https://github.com/user-attachments/assets/131bb611-00ee-496d-a1dc-08e99bab5e06" />
-<img width="1314" height="926" alt="9686b2e1233161bdc30baf8abf9b1d45" src="https://github.com/user-attachments/assets/b5b69230-f3a6-4f5b-b7bb-f62a325e5770" />
-<img width="322" height="530" alt="36ab8965642683cbd4829585ac859169" src="https://github.com/user-attachments/assets/12511adb-8d09-4870-9d50-87eb1df93301" />
+![黑白手绘双宠配置中心](docs/images/ink-pets.png)
 
 ## 功能概览
 
+- 漫画双宠：内置 Whisky / Cling 原版、黑白手绘和彩色漫画，一键切换，九动作独立预览。详见[双宠使用说明](docs/ink-companions.md)。
 - 原生 macOS 桌宠：透明悬浮窗口、菜单栏控制、随机慢速走动、暂停、隐藏、锁定位置。
 - 宠物素材管理：支持上传静态图片、GIF/APNG、MP4/MOV，也支持导入 Codex pet 包。
 - 9 动作桌宠：Codex pet 包可使用 `idle`、`runningRight`、`runningLeft`、`waving`、`jumping`、`failed`、`waiting`、`running`、`review`。
@@ -33,6 +30,8 @@ Native macOS desktop pet for AI coding progress and lightweight vocabulary revie
 
 zip 内也包含 `bin/petctl`，可用于向运行中的桌宠上报 AI 进度。
 
+完整包已内置 **6 套 Whisky / Cling 九动作宠物**、**3,674 个雅思高频词（含已有音标）**、少量英日语示例词和 **ChromeExtension 插件**。首次运行无需再下载这些素材。Release 另提供独立插件 ZIP、`asset-manifest.json` 内容清单与 `SHA256SUMS`，不包含个人设置、Key、配对码或学习记录。详见[本版发布说明](docs/release-notes.md)。
+
 ## 从源码运行
 
 ```bash
@@ -41,11 +40,15 @@ cd mac-desktop-pet-public
 swift run whiskycolin
 ```
 
-启动后会出现菜单栏应用 `Whisky&Cling`、透明桌宠窗口，以及配置中心。首次没有导入宠物时会自动打开配置中心。
+启动后会出现菜单栏应用 `Whisky&Cling`、透明桌宠窗口，以及配置中心。首次启动自动打开配置中心并添加双宠素材；升级不会覆盖已有宠物的权重和启用状态。
 
 最低目标系统：macOS 14+。
 
 ## 配置中心
+
+侧栏底部的 **主题样式** 可在 **经典漫画** 和 **童话绘本** 之间切换，即时更新配置中心与桌宠气泡，并在重启后保留。旧用户默认沿用经典漫画。主题与宠物造型独立：切换主题不改启用宠物、权重、词典、学习记录或浏览器配对；黑白手绘、彩色漫画和写实素材均保留。绘本双宠插画用于配置页展示，不会把上传的动画宠物替换成静态图。
+
+查看[双主题截图与说明](docs/themes.md)。浏览器插件暂不跟随桌面主题。
 
 从菜单栏 `Whisky&Cling` 打开 `打开配置中心...`。
 
@@ -59,10 +62,13 @@ swift run whiskycolin
 - `移动速度`：调整桌宠走动速度，支持很慢的桌宠节奏。
 - `点击反馈`：配置 3-5 条点击桌宠时随机出现的话。
 - 宠物卡片：启用/禁用、出现权重、预览动作、删除素材。
+- `彩色漫画` / `黑白手绘` / `写实原版`：切换 Whisky / Cling 的独立素材，保留其他宠物设置。
 
 Codex pet 包会复制到本 App 数据目录，并同步安装到 `~/.codex/pets/<pet-id>`，方便 Codex pet 生态继续使用。
 
 ### 词典学习
+
+![词典学习配置](docs/images/ink-vocabulary.png)
 
 这里管理背单词内容：
 
@@ -158,12 +164,16 @@ FSRS 的到期时间表示“可以复习的时间”，实际弹出还受学习
 1. 解压完整发布包，在 Chrome 打开 `chrome://extensions`，开启开发者模式。
 2. 点击“加载已解压的扩展程序”，选择 `ChromeExtension` 文件夹。请把文件夹放在固定位置。
 3. 桌宠配置中心 -> 词典学习 -> 我的生词本，点击“复制 Chrome 配对码”。
-4. 点击 Chrome 扩展图标，在“桌宠配对”里粘贴配对码并保存；修改端口时同步修改服务地址。
-5. 在网页选中单词，右键“加入 Whisky&Cling 生词本”，核对内容后保存。
+4. 点击 Chrome 扩展图标，在“桌宠配对与自动补全”里粘贴配对码并保存；修改端口时同步修改服务地址。
+5. 网页选词后会在旁边出现珊瑚色 `+` 按钮，点击就地查看释义，再点“收藏到桌宠”。不会新建标签页。
 
-![Chrome 生词收藏](docs/images/chrome-vocabulary.png)
+![页内生词卡](docs/images/inline-vocabulary.png)
 
-继续使用 Immersive Translate 查词即可。本扩展读取你主动选择的词和附近原文，不修改沉浸式翻译；复制其翻译内容后可在收藏预览中提取明确的音标/词性释义，其余字段可手动填写。需要完整 AI 补全时，在桌宠生词本中编辑该词，粘贴翻译内容并点“用 DeepSeek 解析并补全”；此操作会调用你配置的 DeepSeek 服务，结果确认保存后才入库。没有释义的词暂不自动出题。
+可继续同时使用 Immersive Translate。桌宠插件不读取或修改它的内部浮层，只处理你主动选中的单词和当前句子。优先查询本地词典；在插件面板开启 DeepSeek 自动补全后，点击查询时才补全缺失释义、音标、例句和中文译文，Key 仅保留在 Mac Keychain。不会上传整页、来源网址或网页标题。未开启补全或服务失败时也能先收藏，不会要求填一整张表单。
+
+更新插件后需要在 Chrome 扩展管理页重新加载，并刷新正在阅读的网页。页内选词需要当前网站的访问权限；Chrome 内部页面和内置 PDF 阅读器等受限页面可使用工具栏的小面板，不会强行新开标签页。
+
+桌面词卡查看释义前后保持相同外框与位置，长内容可在卡内滚动。CSV/JSON 支持 `exampleTranslation` 字段；旧词典缺失译文时会在展示释义后通过已配置的 DeepSeek 按需补全并缓存，不会批量上传整个词本。无法补译时保留原文并显示缺失状态，不编造译文。
 
 桌宠不在线时收藏保存在 Chrome 本地队列，每两分钟重试，也可以手动重试。配对失败或字段不合法会提示错误，不显示假成功。重复收藏同语言、同拼写词条会补充语境，保留原熟练度。配置中心支持搜索、按状态筛选、编辑、删除、查看语境和复习记录。
 

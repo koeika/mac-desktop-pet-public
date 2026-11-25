@@ -9,19 +9,22 @@ public final class LocalHTTPServer {
     private let eventHandler: (ProgressEvent) -> Void
     private let vocabularyToken: String?
     private let vocabularyHandler: ((String, Data) throws -> Data)?
+    private let lookupHandler: ((Data) async throws -> Data)?
 
     public init(
         port: UInt16 = 4789,
         stateProvider: @escaping () -> AgentState,
         eventHandler: @escaping (ProgressEvent) -> Void,
         vocabularyToken: String? = nil,
-        vocabularyHandler: ((String, Data) throws -> Data)? = nil
+        vocabularyHandler: ((String, Data) throws -> Data)? = nil,
+        lookupHandler: ((Data) async throws -> Data)? = nil
     ) {
         self.port = port
         self.stateProvider = stateProvider
         self.eventHandler = eventHandler
         self.vocabularyToken = vocabularyToken
         self.vocabularyHandler = vocabularyHandler
+        self.lookupHandler = lookupHandler
     }
 
     public func start() throws {
@@ -74,10 +77,26 @@ public final class LocalHTTPServer {
             return
         }
 
-        if request.path == "/v1/vocabulary" {
+        if request.path == "/v1/vocabulary" || request.path == "/v1/vocabulary/lookup" {
             guard let token = vocabularyToken, !token.isEmpty,
                   request.headers["authorization"] == "Bearer \(token)" else {
                 respond(status: 401, body: ErrorResponse(ok: false, error: "请在 Chrome 扩展中填写桌宠配对码。"), on: connection)
+                return
+            }
+            if request.path == "/v1/vocabulary/lookup" {
+                guard request.method == "POST", let lookupHandler else {
+                    respond(status: 404, body: ErrorResponse(ok: false, error: "Not found"), on: connection)
+                    return
+                }
+                Task {
+                    do {
+                        let data = try await lookupHandler(request.body)
+                        self.respond(status: 200, rawBody: data, on: connection)
+                    } catch {
+                        self.respond(status: error is CaptureError || error is DecodingError ? 400 : 500,
+                            body: ErrorResponse(ok: false, error: error.localizedDescription), on: connection)
+                    }
+                }
                 return
             }
             guard ["GET", "POST"].contains(request.method), let vocabularyHandler else {

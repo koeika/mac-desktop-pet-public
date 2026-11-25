@@ -20,3 +20,7 @@ export function parseCopiedEntry(text, term) {
   if(term && !term.includes("\n"))result.term=term;
   return result;
 }
+export function lookupDraft(term, currentWord) {
+  if (currentWord?.term === term) return {...currentWord};
+  return {term, language: /[ぁ-んァ-ン一-龯]/.test(term) ? "ja" : "en", meaning: ""};
+}

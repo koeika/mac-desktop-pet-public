@@ -90,9 +90,8 @@ public struct CapturedWord: Codable, Equatable, Identifiable {
     public var statKey: String { WordStat.key(dictionaryID: dictionaryID, term: content.term) }
     public var entry: DictionaryEntry {
         let phonetics = [content.phoneticUK.map { "UK \($0)" }, content.phoneticUS.map { "US \($0)" }].compactMap { $0 }.joined(separator: " · ")
-        let example = [content.example, content.exampleTranslation].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: "\n")
         return DictionaryEntry(term: content.term, phonetic: phonetics.isEmpty ? nil : phonetics,
-            meaning: content.meaning, example: example.isEmpty ? nil : example, hint: content.hint, tags: ["收藏", content.language])
+            meaning: content.meaning, example: content.example, exampleTranslation: content.exampleTranslation, hint: content.hint, tags: ["收藏", content.language])
     }
 }
 
@@ -115,7 +114,10 @@ public struct PersonalVocabulary: Codable, Equatable {
             if !content.meaning.isEmpty { word.content.meaning = content.meaning }
             if let value = content.phoneticUS, !value.isEmpty { word.content.phoneticUS = value }
             if let value = content.phoneticUK, !value.isEmpty { word.content.phoneticUK = value }
-            if let value = content.example, !value.isEmpty { word.content.example = value }
+            if let value = content.example, !value.isEmpty {
+                if word.content.example != value { word.content.exampleTranslation = nil }
+                word.content.example = value
+            }
             if let value = content.exampleTranslation, !value.isEmpty { word.content.exampleTranslation = value }
             if let value = content.hint, !value.isEmpty { word.content.hint = value }
             if let value = content.sourceURL, !value.isEmpty { word.content.sourceURL = value }

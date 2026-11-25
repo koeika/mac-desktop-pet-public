@@ -1,20 +1,11 @@
 <!doctype html>
-<html lang="zh-CN">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Whisky&Cling 生词收藏</title><link rel="stylesheet" href="style.css"></head>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Whisky&Cling 生词收藏</title><link rel="stylesheet" href="style.css"></head>
 <body><main>
-<header><img src="icon.png" alt="" width="42" height="42"><div><h1>Whisky&Cling</h1><span>收藏生词</span></div></header>
-<details id="pairing"><summary>桌宠配对</summary><label>服务地址<input id="endpoint" value="http://127.0.0.1:4789" autocomplete="off"></label><label>配对码<input id="token" type="password" autocomplete="off"></label><button id="save-config" type="button">保存配对</button></details>
-<form id="capture-form">
-<div class="row"><label>单词 / 短语<input id="term" required maxlength="120"></label><label>语言<select id="language"><option value="en">英语</option><option value="ja">日语</option><option value="other">其他</option></select></label></div>
-<div class="row"><label>UK 音标 / 日语读音<input id="phoneticUK"></label><label>US 音标<input id="phoneticUS"></label></div>
-<label>释义 / 词性<textarea id="meaning" rows="2" maxlength="8000"></textarea></label>
-<label>原文例句<textarea id="example" rows="3" maxlength="8000"></textarea></label>
-<label>例句翻译<textarea id="exampleTranslation" rows="2" maxlength="8000"></textarea></label>
-<label>语境说明<textarea id="hint" rows="2" maxlength="8000"></textarea></label>
-<label>来源网页<input id="sourceURL" type="url"></label><label>网页标题<input id="sourceTitle"></label>
-<details><summary>粘贴沉浸式翻译词条</summary><textarea id="copied" rows="4" placeholder="复制词条后粘贴到这里"></textarea><button id="parse" type="button">提取音标和释义</button></details>
-<button id="submit" class="primary" type="submit">加入桌宠词本</button>
-</form>
+<header><img src="icon.png" alt="" width="34" height="34"><h1>Whisky & Cling</h1><span id="connection">生词本</span></header>
+<form id="lookup-form"><input id="term" aria-label="查询单词" placeholder="单词或短语" required maxlength="120" autocomplete="off"><button class="primary" id="lookup" type="submit">查询</button></form>
+<article id="result" hidden><h2 id="word-title"></h2><p class="phonetic" id="phonetic"></p><p class="meaning" id="meaning"></p><blockquote><span id="example"></span><span class="translation" id="translation"></span></blockquote><p class="hint" id="hint"></p><button id="submit" class="primary" type="button">收藏到桌宠</button></article>
 <p id="status" role="status" aria-live="polite"></p>
+<details id="pairing"><summary>桌宠配对与自动补全</summary><label>本地服务<input id="endpoint" value="http://127.0.0.1:4789" autocomplete="off"></label><label>配对码<input id="token" type="password" autocomplete="off"></label><label class="check"><input id="cloud" type="checkbox">缺项时用 DeepSeek 自动补全</label><p class="privacy">开启后，点击查询只发送单词、释义和当前句子。Key 留在 Mac，不读取整页，不传来源网址。</p><button id="save-config" type="button">保存配对</button></details>
+<details><summary>粘贴已有词条</summary><textarea id="copied" rows="3" aria-label="已有词条"></textarea><button id="parse" type="button">读取词条</button></details>
 <details id="queue"><summary id="pending-title">待发送 0 条</summary><button id="retry" type="button">立即重试</button><div id="pending-items"></div></details>
 </main><script src="capture.js" type="module"></script></body></html>

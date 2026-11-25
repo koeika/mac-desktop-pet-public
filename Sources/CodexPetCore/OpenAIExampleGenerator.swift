@@ -3,11 +3,13 @@ import Foundation
 public struct GeneratedDictionaryExample: Codable, Equatable {
     public var term: String
     public var example: String
+    public var exampleTranslation: String?
     public var hint: String?
 
-    public init(term: String, example: String, hint: String? = nil) {
+    public init(term: String, example: String, hint: String? = nil, exampleTranslation: String? = nil) {
         self.term = term
         self.example = example
+        self.exampleTranslation = exampleTranslation
         self.hint = hint
     }
 }
@@ -28,7 +30,7 @@ public enum ExampleProvider: String, Codable, CaseIterable, Equatable, Identifia
     public var defaultModel: String {
         switch self {
         case .openAI: return "gpt-5.2"
-        case .deepSeek: return "deepseek-chat"
+        case .deepSeek: return DeepSeekConfiguration.defaultModel
         }
     }
 
@@ -95,10 +97,11 @@ public enum ExampleGenerator {
                     "items": [
                         "type": "object",
                         "additionalProperties": false,
-                        "required": ["term", "example", "hint"],
+                        "required": ["term", "example", "exampleTranslation", "hint"],
                         "properties": [
                             "term": ["type": "string"],
                             "example": ["type": "string"],
+                            "exampleTranslation": ["type": "string"],
                             "hint": ["type": "string"]
                         ]
                     ]
@@ -108,7 +111,7 @@ public enum ExampleGenerator {
 
         let body: [String: Any] = [
             "model": model.isEmpty ? "gpt-5.2" : model,
-            "instructions": "You generate concise, original dictionary example sentences. Return JSON only. Do not copy long source text.",
+            "instructions": "You generate concise, original dictionary example sentences and their Chinese translations in exampleTranslation. Return JSON only. Do not copy long source text.",
             "input": [
                 [
                     "role": "user",
@@ -152,7 +155,7 @@ public enum ExampleGenerator {
             "messages": [
                 [
                     "role": "system",
-                    "content": "You generate concise, original dictionary example sentences. Return only JSON with this shape: {\"examples\":[{\"term\":\"...\",\"example\":\"...\",\"hint\":\"...\"}]}. Do not copy long source text."
+                    "content": "You generate concise, original dictionary example sentences. Always provide a Chinese translation. Return only JSON with this shape: {\"examples\":[{\"term\":\"...\",\"example\":\"...\",\"exampleTranslation\":\"中文译文\",\"hint\":\"...\"}]}. Do not copy long source text."
                 ],
                 [
                     "role": "user",

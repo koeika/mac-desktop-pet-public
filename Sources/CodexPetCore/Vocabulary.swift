@@ -6,6 +6,7 @@ public struct DictionaryEntry: Codable, Hashable, Equatable {
     public var phonetic: String?
     public var meaning: String
     public var example: String?
+    public var exampleTranslation: String?
     public var hint: String?
     public var tags: [String]
 
@@ -15,6 +16,7 @@ public struct DictionaryEntry: Codable, Hashable, Equatable {
         phonetic: String? = nil,
         meaning: String,
         example: String? = nil,
+        exampleTranslation: String? = nil,
         hint: String? = nil,
         tags: [String] = []
     ) {
@@ -23,6 +25,7 @@ public struct DictionaryEntry: Codable, Hashable, Equatable {
         self.phonetic = phonetic
         self.meaning = meaning
         self.example = example
+        self.exampleTranslation = exampleTranslation
         self.hint = hint
         self.tags = tags
     }
@@ -34,6 +37,7 @@ public struct DictionaryEntry: Codable, Hashable, Equatable {
         phonetic = try container.decodeIfPresent(String.self, forKey: .phonetic)
         meaning = try container.decode(String.self, forKey: .meaning)
         example = try container.decodeIfPresent(String.self, forKey: .example)
+        exampleTranslation = try container.decodeIfPresent(String.self, forKey: .exampleTranslation)
         hint = try container.decodeIfPresent(String.self, forKey: .hint)
         tags = try container.decodeIfPresent([String].self, forKey: .tags) ?? []
     }

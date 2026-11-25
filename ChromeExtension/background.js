@@ -1,4 +1,4 @@
-import {localEndpoint, sendWord} from "./client.js";
+import {localEndpoint, sendWord, lookupWord} from "./client.js";
 
 let tail = Promise.resolve();
 function serialized(operation) {
@@ -21,12 +21,15 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
     });
     example = results[0]?.result || "";
   } catch { /* Restricted pages still allow saving the selected word and link. */ }
-  const id = crypto.randomUUID();
-  await chrome.storage.session.set({[id]: {
+  const word = {
     term: info.selectionText?.trim().slice(0, 120) || "", language: "en", meaning: "", example,
     sourceURL: /^https?:/.test(info.pageUrl || "") ? info.pageUrl : "", sourceTitle: tab?.title || ""
-  }});
-  await chrome.tabs.create({url: chrome.runtime.getURL("capture.html?draft=" + id)});
+  };
+  try { await chrome.tabs.sendMessage(tab.id, {type: "show-capture", word}); }
+  catch {
+    await chrome.storage.session.set({toolbarDraft: word});
+    await chrome.action.openPopup().catch(() => chrome.action.setBadgeText({text: "+1", tabId: tab.id}));
+  }
 });
 async function config() {
   return (await chrome.storage.local.get("config")).config || {endpoint: "http://127.0.0.1:4789", token: ""};
@@ -36,7 +39,17 @@ async function retryQueue() {
   const settings = await config();
   const remaining = [];
   for (const item of pending) {
-    try { if ((await sendWord(item.word, settings)).offline) remaining.push(item); }
+    try {
+      let word = item.word;
+      if (item.needsLookup) {
+        try {
+          const result = await lookupWord(word, settings);
+          if (result.offline) { remaining.push(item); continue; }
+          word = result.word;
+        } catch { /* Saving the original capture must not depend on an optional AI provider. */ }
+      }
+      if ((await sendWord(word, settings)).offline) remaining.push({...item, word});
+    }
     catch (error) { remaining.push({...item, error: error.message}); }
   }
   await chrome.storage.local.set({pending: remaining});
@@ -46,7 +59,15 @@ chrome.alarms.onAlarm.addListener(alarm => {
   if (alarm.name === "retry") serialized(retryQueue).catch(() => {});
 });
 chrome.runtime.onMessage.addListener((message, sender, reply) => {
-  if (sender.id !== chrome.runtime.id || !sender.url?.startsWith(chrome.runtime.getURL(""))) return;
+  const extensionPage = sender.url?.startsWith(chrome.runtime.getURL(""));
+  const contentPage = sender.tab && /^https?:\/\//.test(sender.url || "");
+  if (sender.id !== chrome.runtime.id || (!extensionPage && !contentPage)) return;
+  if (!extensionPage && !["lookup", "submit"].includes(message.type)) return;
+  if (message.type === "lookup") {
+    config().then(settings => lookupWord(message.word, settings))
+      .then(result => reply({ok: true, ...result}), error => reply({ok: false, error: error.message}));
+    return true;
+  }
   serialized(async () => {
     if (message.type === "status") {
       return {config: await config(), pending: (await chrome.storage.local.get("pending")).pending || []};
@@ -55,15 +76,17 @@ chrome.runtime.onMessage.addListener((message, sender, reply) => {
       const endpoint = localEndpoint(message.config.endpoint);
       const token = message.config.token.trim();
       if (!token) throw new Error("配对码不能为空。");
-      await chrome.storage.local.set({config: {endpoint, token}});
+      await chrome.storage.local.set({config: {endpoint, token, cloudLookup: message.config.cloudLookup === true}});
       return {};
     }
     if (message.type === "submit") {
       const result = await sendWord(message.word, await config());
       if (result.offline) {
         const {pending = []} = await chrome.storage.local.get("pending");
-        if (pending.length >= 200) throw new Error("待发送已达 200 条，请先启动桌宠并重试。");
-        pending.push({id: crypto.randomUUID(), word: message.word, at: new Date().toISOString()});
+        if (!pending.some(item => JSON.stringify(item.word) === JSON.stringify(message.word))) {
+          if (pending.length >= 200) throw new Error("待发送已达 200 条，请先启动桌宠并重试。");
+          pending.push({id: crypto.randomUUID(), word: message.word, needsLookup: !message.word.meaning, at: new Date().toISOString()});
+        }
         await chrome.storage.local.set({pending});
       }
       return result;

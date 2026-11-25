@@ -1,6 +1,7 @@
 import Foundation
 import CodexPetCore
 import Security
+import LocalAuthentication
 
 enum KeychainStore {
     private static let service = "CodexDesktopPet"
@@ -16,8 +17,7 @@ enum KeychainStore {
     }
 
     static var hasOpenAIAPIKey: Bool {
-        guard let value = readOpenAIAPIKey() else { return false }
-        return !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        hasPassword(account: openAIAccount)
     }
 
     static func saveExampleAPIKey(_ value: String, provider: ExampleProvider) throws {
@@ -29,8 +29,22 @@ enum KeychainStore {
     }
 
     static func hasExampleAPIKey(provider: ExampleProvider) -> Bool {
-        guard let value = readExampleAPIKey(provider: provider) else { return false }
-        return !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        hasPassword(account: account(for: provider))
+    }
+
+    private static func hasPassword(account: String) -> Bool {
+        // Saved-status labels must not decrypt credentials or block UI on a Keychain consent dialog.
+        let context = LAContext()
+        context.interactionNotAllowed = true
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: account,
+            kSecReturnAttributes as String: true,
+            kSecMatchLimit as String: kSecMatchLimitOne,
+            kSecUseAuthenticationContext as String: context
+        ]
+        return SecItemCopyMatching(query as CFDictionary, nil) == errSecSuccess
     }
 
     private static func account(for provider: ExampleProvider) -> String {

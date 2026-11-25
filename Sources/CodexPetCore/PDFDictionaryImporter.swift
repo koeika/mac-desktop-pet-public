@@ -8,6 +8,7 @@ public struct DictionaryImportDraftEntry: Codable, Identifiable, Equatable {
     public var phonetic: String?
     public var meaning: String
     public var example: String?
+    public var exampleTranslation: String?
     public var hint: String?
     public var tags: [String]
     public var context: String
@@ -21,6 +22,7 @@ public struct DictionaryImportDraftEntry: Codable, Identifiable, Equatable {
         phonetic: String? = nil,
         meaning: String,
         example: String? = nil,
+        exampleTranslation: String? = nil,
         hint: String? = nil,
         tags: [String] = [],
         context: String,
@@ -33,6 +35,7 @@ public struct DictionaryImportDraftEntry: Codable, Identifiable, Equatable {
         self.phonetic = phonetic
         self.meaning = meaning
         self.example = example
+        self.exampleTranslation = exampleTranslation
         self.hint = hint
         self.tags = tags
         self.context = context
@@ -47,6 +50,7 @@ public struct DictionaryImportDraftEntry: Codable, Identifiable, Equatable {
             phonetic: phonetic,
             meaning: meaning,
             example: example,
+            exampleTranslation: exampleTranslation,
             hint: hint,
             tags: tags
         )

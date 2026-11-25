@@ -20,9 +20,10 @@ struct AppSettings: Codable {
     var positionLocked: Bool = false
     var lastWindowOrigin: CGPoint?
     var movementSpeedMultiplier: Double = 0.20
+    var visualTheme: AppVisualTheme = .comic
     var exampleProvider: ExampleProvider = .openAI
     var openAIModel: String = "gpt-5.2"
-    var deepSeekModel: String = "deepseek-chat"
+    var deepSeekModel: String = DeepSeekConfiguration.defaultModel
     var deepSeekBaseURL: String = "https://api.deepseek.com"
     var dailyVocabularyLimit: Int = 10
     var vocabularyWindowHours: Int = 6
@@ -49,6 +50,7 @@ struct AppSettings: Codable {
         case positionLocked
         case lastWindowOrigin
         case movementSpeedMultiplier
+        case visualTheme
         case exampleProvider
         case openAIModel
         case deepSeekModel
@@ -75,9 +77,10 @@ struct AppSettings: Codable {
         positionLocked = try container.decodeIfPresent(Bool.self, forKey: .positionLocked) ?? false
         lastWindowOrigin = try container.decodeIfPresent(CGPoint.self, forKey: .lastWindowOrigin)
         movementSpeedMultiplier = try container.decodeIfPresent(Double.self, forKey: .movementSpeedMultiplier) ?? 0.20
+        visualTheme = (try container.decodeIfPresent(String.self, forKey: .visualTheme)).flatMap(AppVisualTheme.init(rawValue:)) ?? .comic
         exampleProvider = try container.decodeIfPresent(ExampleProvider.self, forKey: .exampleProvider) ?? .openAI
         openAIModel = try container.decodeIfPresent(String.self, forKey: .openAIModel) ?? "gpt-5.2"
-        deepSeekModel = try container.decodeIfPresent(String.self, forKey: .deepSeekModel) ?? "deepseek-chat"
+        deepSeekModel = try container.decodeIfPresent(String.self, forKey: .deepSeekModel) ?? DeepSeekConfiguration.defaultModel
         deepSeekBaseURL = try container.decodeIfPresent(String.self, forKey: .deepSeekBaseURL) ?? "https://api.deepseek.com"
         dailyVocabularyLimit = VocabularyDisplayScheduler.normalizedDailyLimit(
             try container.decodeIfPresent(Int.self, forKey: .dailyVocabularyLimit) ?? 10
@@ -313,12 +316,18 @@ final class AppDataStore: ObservableObject {
         }
 
         settings = JSONFileStore.load(AppSettings.self, from: settingsURL, fallback: AppSettings())
+        let currentModel = DeepSeekConfiguration.resolvedModel(settings.deepSeekModel, baseURL: settings.deepSeekBaseURL)
+        if currentModel != settings.deepSeekModel {
+            settings.deepSeekModel = currentModel
+            try JSONFileStore.save(settings, to: settingsURL)
+        }
         if abs(settings.movementSpeedMultiplier - 0.45) < 0.000_1 {
             settings.movementSpeedMultiplier = 0.20
         }
         pets = JSONFileStore.load([PetAsset].self, from: petsManifestURL, fallback: [])
         vocabularyProgress = JSONFileStore.load(VocabularyProgress.self, from: progressURL, fallback: VocabularyProgress())
         dictionaries = BuiltInDictionaries.packs
+        try installBundledPetsIfNeeded()
         try installBundledDictionariesIfNeeded()
         try loadUserDictionaries()
         syncLearningProgress()
@@ -343,6 +352,16 @@ final class AppDataStore: ObservableObject {
 
     func savePets() {
         try? JSONFileStore.save(pets, to: petsManifestURL)
+    }
+
+    func selectVisualTheme(_ theme: AppVisualTheme) throws {
+        guard settings.visualTheme != theme else { return }
+        var updated = settings
+        updated.visualTheme = theme
+        try JSONFileStore.save(updated, to: settingsURL)
+        objectWillChange.send()
+        settings = updated
+        NotificationCenter.default.post(name: .companionThemeDidChange, object: self)
     }
 
     func saveLearningProgress() {
@@ -460,6 +479,7 @@ final class AppDataStore: ObservableObject {
                 continue
             }
             updated.entries[index].example = generated.example
+            updated.entries[index].exampleTranslation = generated.exampleTranslation
             updated.entries[index].hint = generated.hint
         }
         return updated
@@ -836,7 +856,7 @@ final class AppDataStore: ObservableObject {
 
     func setDeepSeekModel(_ value: String) {
         let model = value.trimmingCharacters(in: .whitespacesAndNewlines)
-        let next = model.isEmpty ? "deepseek-chat" : model
+        let next = model.isEmpty ? DeepSeekConfiguration.defaultModel : model
         guard settings.deepSeekModel != next else { return }
         objectWillChange.send()
         settings.deepSeekModel = next
@@ -857,7 +877,7 @@ final class AppDataStore: ObservableObject {
         case .openAI:
             return settings.openAIModel.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "gpt-5.2" : settings.openAIModel
         case .deepSeek:
-            return settings.deepSeekModel.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "deepseek-chat" : settings.deepSeekModel
+            return settings.deepSeekModel.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? DeepSeekConfiguration.defaultModel : settings.deepSeekModel
         }
     }
 

@@ -19,20 +19,52 @@ enum BubblePresentation {
     case compact
 }
 
+private final class PetActionButton: NSButton {
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+}
+
+private final class PetTextDocument: NSView {
+    override var isFlipped: Bool { true }
+}
+
 final class PetContentView: NSView {
     weak var delegate: PetContentViewDelegate?
     var canDragWindow = true
+    private(set) var visualTheme: AppVisualTheme = .comic
+
+    func applyTheme(_ theme: AppVisualTheme) {
+        guard visualTheme != theme else { return }
+        visualTheme = theme
+        bubbleView.theme = theme
+        titleLabel.textColor = theme.inkNSColor
+        kickerLabel.textColor = theme == .storybook ? theme.accentNSColor : NSColor(calibratedWhite: 0.38, alpha: 1)
+        let text = NSMutableAttributedString(attributedString: bodyLabel.attributedStringValue)
+        text.addAttribute(.foregroundColor, value: theme.inkNSColor, range: NSRange(location: 0, length: text.length))
+        bodyLabel.attributedStringValue = text
+        styleActionButton(knownButton, background: theme.accentNSColor, foreground: .white)
+        styleActionButton(revealButton, background: theme.accentNSColor, foreground: .white)
+        let neutral = theme == .comic ? NSColor(calibratedWhite: 0.92, alpha: 1) : theme.washNSColor
+        styleActionButton(unknownButton, background: neutral, foreground: theme.inkNSColor)
+        styleActionButton(hardButton, background: theme == .comic ? neutral : NSColor(calibratedRed: 1, green: 0.90, blue: 0.85, alpha: 1), foreground: theme.inkNSColor)
+        styleActionButton(skipButton, background: theme == .comic ? NSColor(calibratedWhite: 0.96, alpha: 1) : NSColor(calibratedRed: 0.93, green: 0.96, blue: 0.99, alpha: 1), foreground: .darkGray)
+    }
 
     private let bubbleView = SpeechBubbleBackgroundView()
     private let kickerLabel = NSTextField(labelWithString: "")
     private let titleLabel = NSTextField(labelWithString: "")
     private let bodyLabel = NSTextField(wrappingLabelWithString: "")
+    private let bodyScroll = NSScrollView()
+    private let bodyDocument = PetTextDocument()
+    private var resetBodyScroll = false
+    private var sizingBody: String?
+    private var vocabularyLayoutKey: String?
+    private var lockedVocabularySize: NSSize?
     private let footerLabel = NSTextField(labelWithString: "")
-    private let knownButton = NSButton(title: "认识啦", target: nil, action: nil)
-    private let unknownButton = NSButton(title: "不认识", target: nil, action: nil)
-    private let skipButton = NSButton(title: "先跳过", target: nil, action: nil)
-    private let hardButton = NSButton(title: "有点印象", target: nil, action: nil)
-    private let revealButton = NSButton(title: "查看释义", target: nil, action: nil)
+    private let knownButton = PetActionButton(title: "认识啦", target: nil, action: nil)
+    private let unknownButton = PetActionButton(title: "不认识", target: nil, action: nil)
+    private let skipButton = PetActionButton(title: "先跳过", target: nil, action: nil)
+    private let hardButton = PetActionButton(title: "有点印象", target: nil, action: nil)
+    private let revealButton = PetActionButton(title: "查看释义", target: nil, action: nil)
     private let petContainer = NSView()
     private let imageView = NSImageView()
     private let videoView = NSView()
@@ -57,6 +89,28 @@ final class PetContentView: NSView {
 
     var isBubbleVisible: Bool {
         !bubbleView.isHidden
+    }
+
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+
+    var bubbleLayoutSnapshot: (bubble: NSRect, controls: [NSRect]) {
+        (bubbleView.frame, [revealButton, unknownButton, hardButton, knownButton, skipButton]
+            .filter { !$0.isHidden }.map(\.frame))
+    }
+
+    func showVocabularyCard(kicker: String, title: String, prompt: String, answer: String,
+                            revealed: Bool, footer: String, known: String, unknown: String, hard: String) {
+        let key = kicker + "|" + title
+        let previousSize = vocabularyLayoutKey == key ? lockedVocabularySize : nil
+        showMessage(kicker: kicker, title: title, body: revealed ? answer : prompt,
+                    showActions: true, footer: footer, animated: false)
+        vocabularyLayoutKey = key
+        lockedVocabularySize = previousSize
+        sizingBody = answer
+        configureVocabularyControls(revealed: revealed, known: known, unknown: unknown, hard: hard)
+        needsLayout = true
+        layoutSubtreeIfNeeded()
+        lockedVocabularySize = bubbleView.frame.size
     }
 
     private var usesProceduralActionAnimation: Bool {
@@ -87,9 +141,13 @@ final class PetContentView: NSView {
         footer: String? = nil,
         autoHideAfter: TimeInterval? = nil,
         presentation: BubblePresentation = .standard,
-        bodyAlignment: NSTextAlignment = .center
+        bodyAlignment: NSTextAlignment = .center,
+        animated: Bool = true
     ) {
         bubbleHideTimer?.invalidate()
+        sizingBody = nil
+        vocabularyLayoutKey = nil
+        lockedVocabularySize = nil
         bubbleRevision += 1
         let cleanKicker = kicker.trimmingCharacters(in: .whitespacesAndNewlines)
         kickerLabel.stringValue = cleanKicker
@@ -97,8 +155,9 @@ final class PetContentView: NSView {
         titleLabel.stringValue = title
         titleLabel.font = presentation == .compact
             ? .systemFont(ofSize: 22, weight: .black)
-            : .systemFont(ofSize: 29, weight: .black)
+            : .systemFont(ofSize: 26, weight: .bold)
         setBodyText(body, alignment: bodyAlignment, presentation: presentation)
+        resetBodyScroll = true
         bodyLabel.isHidden = body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         footerLabel.stringValue = footer ?? ""
         footerLabel.font = .monospacedSystemFont(ofSize: 14, weight: .medium)
@@ -110,9 +169,15 @@ final class PetContentView: NSView {
         revealButton.isHidden = true
         bubbleView.randomizeStyle()
         bubbleView.isHidden = false
-        NSAnimationContext.runAnimationGroup { context in
-            context.duration = 0.16
-            bubbleView.animator().alphaValue = 1
+        needsLayout = true
+        layoutSubtreeIfNeeded()
+        if animated && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+            NSAnimationContext.runAnimationGroup { context in
+                context.duration = 0.16
+                bubbleView.animator().alphaValue = 1
+            }
+        } else {
+            bubbleView.alphaValue = 1
         }
 
         let resolvedAutoHide = autoHideAfter ?? (showActions ? nil : 6)
@@ -127,6 +192,8 @@ final class PetContentView: NSView {
     }
 
     func hideBubble(animated: Bool) {
+        vocabularyLayoutKey = nil
+        lockedVocabularySize = nil
         bubbleRevision += 1
         let revision = bubbleRevision
         bubbleHideTimer?.invalidate()
@@ -183,6 +250,7 @@ final class PetContentView: NSView {
         footerLabel.stringValue += revealed ? "\n不认识 \(unknown) · 印象 \(hard) · 认识 \(known)" : ""
         footerLabel.font = .systemFont(ofSize: 11, weight: .medium)
         footerLabel.maximumNumberOfLines = 2
+        needsLayout = true
     }
 
     func setPetRenderer(_ renderer: PetAnimationRenderer?, fallbackImage: NSImage?) {
@@ -316,23 +384,18 @@ final class PetContentView: NSView {
         addSubview(bubbleView)
 
         kickerLabel.font = .systemFont(ofSize: 14, weight: .heavy)
-        kickerLabel.textColor = NSColor(calibratedRed: 0.97, green: 0.55, blue: 0.24, alpha: 1)
+        kickerLabel.textColor = NSColor(calibratedWhite: 0.38, alpha: 1)
         kickerLabel.alignment = .center
         kickerLabel.lineBreakMode = .byTruncatingTail
         titleLabel.font = .systemFont(ofSize: 29, weight: .black)
         titleLabel.textColor = NSColor(calibratedWhite: 0.13, alpha: 1)
         titleLabel.alignment = .center
         titleLabel.lineBreakMode = .byTruncatingTail
-        bodyLabel.maximumNumberOfLines = 12
+        bodyLabel.maximumNumberOfLines = 0
         footerLabel.font = .monospacedSystemFont(ofSize: 16, weight: .bold)
         footerLabel.textColor = NSColor(calibratedWhite: 0.56, alpha: 1)
         footerLabel.alignment = .center
 
-        let buttonStack = NSStackView(views: [unknownButton, hardButton, knownButton])
-        buttonStack.orientation = .horizontal
-        buttonStack.spacing = 12
-        buttonStack.alignment = .centerY
-        buttonStack.distribution = .equalSpacing
         knownButton.target = self
         knownButton.action = #selector(knownTapped)
         unknownButton.target = self
@@ -343,18 +406,22 @@ final class PetContentView: NSView {
         hardButton.action = #selector(hardTapped)
         revealButton.target = self
         revealButton.action = #selector(revealTapped)
-        styleActionButton(knownButton, background: NSColor(calibratedRed: 0.31, green: 0.63, blue: 0.96, alpha: 1), foreground: .white)
-        styleActionButton(unknownButton, background: NSColor(calibratedRed: 1.0, green: 0.64, blue: 0.42, alpha: 1), foreground: .white)
-        styleActionButton(skipButton, background: NSColor(calibratedWhite: 0.50, alpha: 1), foreground: .white)
-        styleActionButton(hardButton, background: .systemTeal, foreground: .white)
-        styleActionButton(revealButton, background: .systemBlue, foreground: .white)
+        styleActionButton(knownButton, background: NSColor(calibratedWhite: 0.08, alpha: 1), foreground: .white)
+        styleActionButton(unknownButton, background: NSColor(calibratedWhite: 0.92, alpha: 1), foreground: .black)
+        styleActionButton(skipButton, background: NSColor(calibratedWhite: 0.96, alpha: 1), foreground: .darkGray)
+        styleActionButton(hardButton, background: NSColor(calibratedWhite: 0.92, alpha: 1), foreground: .black)
+        styleActionButton(revealButton, background: NSColor(calibratedWhite: 0.08, alpha: 1), foreground: .white)
 
-        let textStack = NSStackView(views: [kickerLabel, titleLabel, bodyLabel, footerLabel, revealButton, buttonStack, skipButton])
-        textStack.translatesAutoresizingMaskIntoConstraints = false
-        textStack.orientation = .vertical
-        textStack.alignment = .width
-        textStack.spacing = 12
-        bubbleView.addSubview(textStack)
+        bodyScroll.drawsBackground = false
+        bodyScroll.hasVerticalScroller = true
+        bodyScroll.autohidesScrollers = true
+        bodyScroll.borderType = .noBorder
+        bodyScroll.scrollerStyle = .overlay
+        bodyDocument.addSubview(bodyLabel)
+        bodyScroll.documentView = bodyDocument
+        for view in [kickerLabel, titleLabel, bodyScroll, footerLabel, revealButton, unknownButton, hardButton, knownButton, skipButton] {
+            bubbleView.addSubview(view)
+        }
 
         petContainer.translatesAutoresizingMaskIntoConstraints = false
         petContainer.wantsLayer = true
@@ -380,34 +447,6 @@ final class PetContentView: NSView {
         petContainer.addSubview(defaultPixelPet)
 
         NSLayoutConstraint.activate([
-            bubbleView.leadingAnchor.constraint(greaterThanOrEqualTo: leadingAnchor, constant: 10),
-            bubbleView.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -10),
-            bubbleView.centerXAnchor.constraint(equalTo: centerXAnchor),
-            bubbleView.topAnchor.constraint(greaterThanOrEqualTo: topAnchor, constant: 8),
-            bubbleView.bottomAnchor.constraint(equalTo: petContainer.topAnchor, constant: 2),
-            bubbleView.widthAnchor.constraint(greaterThanOrEqualToConstant: 178),
-            bubbleView.widthAnchor.constraint(lessThanOrEqualToConstant: 390),
-            bubbleView.heightAnchor.constraint(greaterThanOrEqualToConstant: 118),
-
-            textStack.leadingAnchor.constraint(equalTo: bubbleView.leadingAnchor, constant: 24),
-            textStack.trailingAnchor.constraint(equalTo: bubbleView.trailingAnchor, constant: -24),
-            textStack.topAnchor.constraint(equalTo: bubbleView.topAnchor, constant: 24),
-            textStack.bottomAnchor.constraint(equalTo: bubbleView.bottomAnchor, constant: -38),
-            kickerLabel.widthAnchor.constraint(equalTo: textStack.widthAnchor),
-            titleLabel.widthAnchor.constraint(equalTo: textStack.widthAnchor),
-            bodyLabel.widthAnchor.constraint(equalTo: textStack.widthAnchor),
-            footerLabel.widthAnchor.constraint(equalTo: textStack.widthAnchor),
-
-            knownButton.widthAnchor.constraint(greaterThanOrEqualToConstant: 86),
-            unknownButton.widthAnchor.constraint(greaterThanOrEqualToConstant: 86),
-            hardButton.widthAnchor.constraint(greaterThanOrEqualToConstant: 86),
-            skipButton.widthAnchor.constraint(greaterThanOrEqualToConstant: 86),
-            knownButton.heightAnchor.constraint(equalToConstant: 32),
-            unknownButton.heightAnchor.constraint(equalToConstant: 32),
-            skipButton.heightAnchor.constraint(equalToConstant: 32),
-            hardButton.heightAnchor.constraint(equalToConstant: 32),
-            revealButton.heightAnchor.constraint(equalToConstant: 32),
-
             petContainer.centerXAnchor.constraint(equalTo: centerXAnchor),
             petContainer.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -14),
             petContainer.widthAnchor.constraint(equalToConstant: 150),
@@ -442,19 +481,64 @@ final class PetContentView: NSView {
         button.layer?.backgroundColor = background.cgColor
         button.layer?.cornerRadius = 16
         button.layer?.masksToBounds = true
+        button.focusRingType = .none
+    }
+
+    override func layout() {
+        super.layout()
+        playerLayer?.frame = videoView.bounds
+        let hasControls = !skipButton.isHidden
+        let reserved = sizingBody ?? bodyLabel.stringValue
+        let maxWidth = min(352, bounds.width - 24)
+        let titleWidth = (titleLabel.stringValue as NSString).size(withAttributes: [.font: titleLabel.font!]).width
+        let lineWidth = reserved.components(separatedBy: "\n").map {
+            ($0 as NSString).size(withAttributes: [.font: NSFont.systemFont(ofSize: 13)]).width
+        }.max() ?? 0
+        let width = lockedVocabularySize?.width ?? min(maxWidth, max(hasControls ? 320 : 190, min(max(titleWidth, lineWidth) + 48, maxWidth)))
+        let innerWidth = width - 48
+        let attributes: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 14, weight: .semibold)]
+        let measured = (reserved as NSString).boundingRect(with: NSSize(width: innerWidth, height: 2000), options: [.usesLineFragmentOrigin, .usesFontLeading], attributes: attributes).height
+        let bodyHeight = reserved.isEmpty ? 0 : min(max(30, ceil(measured) + 12), hasControls ? 140 : 112)
+        let headerHeight: CGFloat = kickerLabel.isHidden ? 46 : 70
+        let controlsHeight: CGFloat = hasControls ? 106 : 0
+        let height = lockedVocabularySize?.height ?? min(bounds.height - 175, headerHeight + bodyHeight + controlsHeight + 48)
+        bubbleView.frame = NSRect(x: (bounds.width - width) / 2, y: 164, width: width, height: height)
+        var top = height - 24
+        if !kickerLabel.isHidden { kickerLabel.frame = NSRect(x: 24, y: top - 18, width: innerWidth, height: 18); top -= 25 }
+        titleLabel.frame = NSRect(x: 24, y: top - 37, width: innerWidth, height: 37); top -= 46
+        let bottom: CGFloat = hasControls ? 142 : 38
+        let availableBody = max(0, top - bottom)
+        bodyScroll.frame = NSRect(x: 24, y: bottom, width: innerWidth, height: availableBody)
+        bodyScroll.isHidden = bodyLabel.isHidden
+        let actualHeight = max(availableBody, ceil(bodyLabel.attributedStringValue.boundingRect(
+            with: NSSize(width: innerWidth, height: 4000), options: [.usesLineFragmentOrigin, .usesFontLeading]).height) + 8)
+        bodyLabel.frame = NSRect(x: 0, y: 0, width: innerWidth, height: actualHeight)
+        bodyDocument.frame = bodyLabel.frame
+        if resetBodyScroll { bodyScroll.contentView.scroll(to: .zero); resetBodyScroll = false }
+        footerLabel.frame = NSRect(x: 24, y: 112, width: innerWidth, height: 28)
+        let row = revealButton.isHidden ? [unknownButton, hardButton, knownButton].filter { !$0.isHidden } : [revealButton, skipButton]
+        if !row.isEmpty {
+            let gap: CGFloat = 8
+            let controlWidth = (innerWidth - gap * CGFloat(row.count - 1)) / CGFloat(row.count)
+            for (index, control) in row.enumerated() {
+                control.frame = NSRect(x: 24 + CGFloat(index) * (controlWidth + gap), y: 76, width: controlWidth, height: 30)
+            }
+        }
+        if revealButton.isHidden { skipButton.frame = NSRect(x: (width - 112) / 2, y: 40, width: 112, height: 28) }
+        bubbleView.needsDisplay = true
     }
 
     private func setBodyText(_ text: String, alignment: NSTextAlignment, presentation: BubblePresentation) {
         let paragraph = NSMutableParagraphStyle()
-        paragraph.lineSpacing = 4
-        paragraph.paragraphSpacing = 6
+        paragraph.lineSpacing = 2
+        paragraph.paragraphSpacing = 0
         paragraph.alignment = alignment
         bodyLabel.alignment = alignment
         bodyLabel.attributedStringValue = NSAttributedString(
             string: text,
             attributes: [
-                .font: NSFont.systemFont(ofSize: presentation == .compact ? 13 : 14, weight: .semibold),
-                .foregroundColor: NSColor(calibratedWhite: 0.34, alpha: 1),
+                .font: NSFont.systemFont(ofSize: 13, weight: .regular),
+                .foregroundColor: visualTheme == .comic ? NSColor(calibratedWhite: 0.34, alpha: 1) : visualTheme.inkNSColor,
                 .paragraphStyle: paragraph
             ]
         )
@@ -568,11 +652,6 @@ final class PetContentView: NSView {
         }
     }
 
-    override func layout() {
-        super.layout()
-        playerLayer?.frame = videoView.bounds
-    }
-
     private func clearVideo() {
         if let playerLayer {
             playerLayer.removeFromSuperlayer()
@@ -614,6 +693,9 @@ final class PetContentView: NSView {
 }
 
 final class SpeechBubbleBackgroundView: NSView {
+    var theme: AppVisualTheme = .comic {
+        didSet { needsDisplay = true }
+    }
     private enum PixelBubbleStyle: CaseIterable {
         case angular
         case rounded
@@ -636,22 +718,22 @@ final class SpeechBubbleBackgroundView: NSView {
     override var isOpaque: Bool { false }
 
     func randomizeStyle() {
-        style = PixelBubbleStyle.allCases.randomElement() ?? .angular
+        style = .rounded
         needsDisplay = true
     }
 
     private func setup() {
         wantsLayer = true
         layer?.shadowColor = NSColor.black.cgColor
-        layer?.shadowOpacity = 0.12
-        layer?.shadowRadius = 12
-        layer?.shadowOffset = CGSize(width: 0, height: -5)
+        layer?.shadowOpacity = 0.05
+        layer?.shadowRadius = 3
+        layer?.shadowOffset = CGSize(width: 0, height: -2)
     }
 
     override func draw(_ dirtyRect: NSRect) {
         guard let context = NSGraphicsContext.current?.cgContext else { return }
         context.saveGState()
-        context.setShouldAntialias(false)
+        context.setShouldAntialias(true)
         defer { context.restoreGState() }
 
         let rect = bounds.insetBy(dx: 6, dy: 18).offsetBy(dx: 0, dy: 10)
@@ -659,7 +741,8 @@ final class SpeechBubbleBackgroundView: NSView {
         case .angular:
             drawBubble(path: pixelRectPath(in: rect, step: 8), rect: rect, fill: .white, tailWidth: 38, tailOffset: 0)
         case .rounded:
-            drawBubble(path: pixelRoundedPath(in: rect, step: 10), rect: rect, fill: .white, tailWidth: 44, tailOffset: rect.width * 0.20)
+            let path = theme == .storybook ? storybookPath(in: rect) : NSBezierPath(roundedRect: rect, xRadius: 14, yRadius: 14)
+            drawBubble(path: path, rect: rect, fill: .white, tailWidth: 24, tailOffset: 0)
         case .pill:
             drawBubble(path: NSBezierPath(roundedRect: rect, xRadius: min(rect.height * 0.42, 44), yRadius: min(rect.height * 0.42, 44)), rect: rect, fill: .white, tailWidth: 36, tailOffset: -rect.width * 0.24)
         case .lavender:
@@ -674,27 +757,50 @@ final class SpeechBubbleBackgroundView: NSView {
     }
 
     private var strokeColor: NSColor {
-        NSColor(calibratedWhite: 0.06, alpha: 0.95)
+        theme == .comic ? NSColor(calibratedWhite: 0.06, alpha: 0.95) : theme.accentNSColor
     }
 
     private func drawBubble(path: NSBezierPath, rect: NSRect, fill: NSColor, tailWidth: CGFloat, tailOffset: CGFloat) {
         let tail = bottomTail(rect: rect, width: tailWidth, offset: tailOffset)
-        drawPixelShadow(path: path, tail: tail)
 
         fill.setFill()
         path.fill()
         tail.fill()
 
         strokeColor.setStroke()
-        path.lineWidth = 3
+        path.lineWidth = theme == .comic ? 2 : 1.5
         path.stroke()
 
         fill.setFill()
         tail.fill()
         let tailStroke = bottomTailStroke(rect: rect, width: tailWidth, offset: tailOffset)
         strokeColor.setStroke()
-        tailStroke.lineWidth = 3
+        tailStroke.lineWidth = theme == .comic ? 2 : 1.5
         tailStroke.stroke()
+    }
+
+    private func storybookPath(in rect: NSRect) -> NSBezierPath {
+        let path = NSBezierPath()
+        let r: CGFloat = 17
+        path.move(to: NSPoint(x: rect.minX + r, y: rect.minY))
+        path.curve(to: NSPoint(x: rect.maxX - r, y: rect.minY + 0.5),
+                   controlPoint1: NSPoint(x: rect.midX - 35, y: rect.minY - 0.8),
+                   controlPoint2: NSPoint(x: rect.midX + 35, y: rect.minY + 1))
+        path.curve(to: NSPoint(x: rect.maxX, y: rect.minY + r),
+                   controlPoint1: NSPoint(x: rect.maxX - 5, y: rect.minY), controlPoint2: NSPoint(x: rect.maxX, y: rect.minY + 5))
+        path.line(to: NSPoint(x: rect.maxX - 0.5, y: rect.maxY - r))
+        path.curve(to: NSPoint(x: rect.maxX - r, y: rect.maxY),
+                   controlPoint1: NSPoint(x: rect.maxX, y: rect.maxY - 5), controlPoint2: NSPoint(x: rect.maxX - 5, y: rect.maxY))
+        path.curve(to: NSPoint(x: rect.minX + r, y: rect.maxY - 0.5),
+                   controlPoint1: NSPoint(x: rect.midX + 35, y: rect.maxY + 0.8),
+                   controlPoint2: NSPoint(x: rect.midX - 35, y: rect.maxY - 1))
+        path.curve(to: NSPoint(x: rect.minX, y: rect.maxY - r),
+                   controlPoint1: NSPoint(x: rect.minX + 5, y: rect.maxY), controlPoint2: NSPoint(x: rect.minX, y: rect.maxY - 5))
+        path.line(to: NSPoint(x: rect.minX + 0.5, y: rect.minY + r))
+        path.curve(to: NSPoint(x: rect.minX + r, y: rect.minY),
+                   controlPoint1: NSPoint(x: rect.minX, y: rect.minY + 5), controlPoint2: NSPoint(x: rect.minX + 5, y: rect.minY))
+        path.close()
+        return path
     }
 
     private func drawPixelShadow(path: NSBezierPath, tail: NSBezierPath) {

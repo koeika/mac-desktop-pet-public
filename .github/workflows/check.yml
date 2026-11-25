@@ -12,5 +12,6 @@ jobs:
       - uses: actions/checkout@v4
       - run: swift test
       - run: swift run codex-pet-selftest
-      - run: node --test ChromeExtension/tests/client.test.mjs
+      - run: node --test ChromeExtension/tests/*.test.mjs
       - run: swift run whiskycolin --self-test-notebook
+      - run: swift run whiskycolin --self-test-enrichment
