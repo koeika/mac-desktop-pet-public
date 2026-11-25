@@ -1,0 +1,10 @@
+{
+  "manifest_version": 3,
+  "name": "Whisky&Cling 生词收藏",
+  "version": "0.2.0",
+  "description": "从网页收藏单词与原句，发送到本机 Whisky&Cling 桌宠复习。",
+  "permissions": ["contextMenus", "storage", "alarms", "activeTab", "scripting"],
+  "host_permissions": ["http://127.0.0.1/*"],
+  "background": {"service_worker": "background.js", "type": "module"},
+  "action": {"default_title": "收藏到 Whisky&Cling", "default_popup": "capture.html"}
+}

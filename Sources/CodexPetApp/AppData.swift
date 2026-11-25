@@ -32,6 +32,10 @@ struct AppSettings: Codable {
     var vocabularyWindowStartDate: Date?
     var vocabularyShownCountDate: String?
     var vocabularyShownCount: Int = 0
+    var dailyNewVocabularyLimit: Int = 3
+    var newVocabularyKeys: [String] = []
+    var vocabularyRecallMode: Bool = true
+    var vocabularyRetention: Double = 0.9
     var petClickFeedbackPhrases: [String] = AppSettings.defaultPetClickFeedbackPhrases
 
     init() {}
@@ -57,6 +61,7 @@ struct AppSettings: Codable {
         case vocabularyWindowStartDate
         case vocabularyShownCountDate
         case vocabularyShownCount
+        case dailyNewVocabularyLimit, newVocabularyKeys, vocabularyRecallMode, vocabularyRetention
         case petClickFeedbackPhrases
     }
 
@@ -92,6 +97,10 @@ struct AppSettings: Codable {
         vocabularyWindowStartDate = try container.decodeIfPresent(Date.self, forKey: .vocabularyWindowStartDate)
         vocabularyShownCountDate = try container.decodeIfPresent(String.self, forKey: .vocabularyShownCountDate)
         vocabularyShownCount = max(0, try container.decodeIfPresent(Int.self, forKey: .vocabularyShownCount) ?? 0)
+        dailyNewVocabularyLimit = min(20, max(0, try container.decodeIfPresent(Int.self, forKey: .dailyNewVocabularyLimit) ?? 3))
+        newVocabularyKeys = try container.decodeIfPresent([String].self, forKey: .newVocabularyKeys) ?? []
+        vocabularyRecallMode = try container.decodeIfPresent(Bool.self, forKey: .vocabularyRecallMode) ?? true
+        vocabularyRetention = min(0.95, max(0.8, try container.decodeIfPresent(Double.self, forKey: .vocabularyRetention) ?? 0.9))
         petClickFeedbackPhrases = AppSettings.normalizedPetClickFeedbackPhrases(
             try container.decodeIfPresent([String].self, forKey: .petClickFeedbackPhrases)
             ?? AppSettings.defaultPetClickFeedbackPhrases
@@ -268,12 +277,14 @@ final class AppDataStore: ObservableObject {
     var pets: [PetAsset]
     var dictionaries: [DictionaryPack]
     var vocabularyProgress: VocabularyProgress
+    var personalVocabulary: PersonalVocabulary
+    let captureToken: String
     let progressState = ProgressStateStore()
     private var previewImageCache: [String: NSImage] = [:]
     private var spriteRendererCache: [String: PetAnimationRenderer] = [:]
 
-    init() throws {
-        rootURL = try JSONFileStore.applicationSupportDirectory()
+    init(root: URL? = nil) throws {
+        rootURL = try root ?? JSONFileStore.applicationSupportDirectory()
         petsURL = rootURL.appendingPathComponent("Pets", isDirectory: true)
         packagesURL = rootURL.appendingPathComponent("Packages", isDirectory: true)
         dictionariesURL = rootURL.appendingPathComponent("Dictionaries", isDirectory: true)
@@ -284,6 +295,22 @@ final class AppDataStore: ObservableObject {
         try FileManager.default.createDirectory(at: petsURL, withIntermediateDirectories: true)
         try FileManager.default.createDirectory(at: packagesURL, withIntermediateDirectories: true)
         try FileManager.default.createDirectory(at: dictionariesURL, withIntermediateDirectories: true)
+
+        let tokenURL = rootURL.appendingPathComponent("browser-pairing-token")
+        if let token = try? String(contentsOf: tokenURL, encoding: .utf8),
+           !token.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            captureToken = token.trimmingCharacters(in: .whitespacesAndNewlines)
+        } else {
+            captureToken = UUID().uuidString + UUID().uuidString
+            try Data(captureToken.utf8).write(to: tokenURL, options: .atomic)
+        }
+        try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: tokenURL.path)
+        let notebookURL = rootURL.appendingPathComponent("personal-vocabulary.json")
+        if FileManager.default.fileExists(atPath: notebookURL.path) {
+            personalVocabulary = try JSONFileStore.decoder.decode(PersonalVocabulary.self, from: Data(contentsOf: notebookURL))
+        } else {
+            personalVocabulary = PersonalVocabulary()
+        }
 
         settings = JSONFileStore.load(AppSettings.self, from: settingsURL, fallback: AppSettings())
         if abs(settings.movementSpeedMultiplier - 0.45) < 0.000_1 {
@@ -954,6 +981,7 @@ final class AppDataStore: ObservableObject {
         let updated = VocabularyDisplayScheduler.resetIfNeeded(current, now: now)
         guard current != updated else { return }
         objectWillChange.send()
+        if current.shownCountDate != updated.shownCountDate { settings.newVocabularyKeys = [] }
         vocabularyScheduleSnapshot = updated
         saveSettings()
     }
@@ -995,7 +1023,7 @@ final class AppDataStore: ObservableObject {
 
     func enabledEntries() -> [ScopedDictionaryEntry] {
         VocabularyPicker.scopedEntries(
-            from: dictionaries,
+            from: dictionaries + personalVocabulary.packs,
             enabledIDs: settings.enabledDictionaryIDs
         )
     }

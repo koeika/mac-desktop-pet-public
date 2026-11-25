@@ -78,6 +78,7 @@ public enum WordAction: String, Codable, Equatable {
     case known
     case unknown
     case skipped
+    case hard
 }
 
 public struct WordStat: Codable, Equatable {
@@ -87,6 +88,11 @@ public struct WordStat: Codable, Equatable {
     public var seenCount: Int
     public var lastAction: WordAction?
     public var updatedAt: Date
+    public var lastFeedbackAt: Date?
+    public var lastSeenAt: Date?
+    public var postponedUntil: Date?
+    public var legacyDueAt: Date?
+    public var review: ScheduledReview?
 
     public init(
         learned: Bool = false,
@@ -109,15 +115,25 @@ public struct WordStat: Codable, Equatable {
     }
 
     public func merged(with other: WordStat) -> WordStat {
-        let latest = updatedAt >= other.updatedAt ? self : other
-        return WordStat(
-            learned: learned || other.learned,
+        let lhsDate = lastFeedbackAt ?? updatedAt
+        let rhsDate = other.lastFeedbackAt ?? other.updatedAt
+        let lhsTie = (review?.events.last?.id ?? "") + (lastAction?.rawValue ?? "")
+        let rhsTie = (other.review?.events.last?.id ?? "") + (other.lastAction?.rawValue ?? "")
+        let latest = lhsDate == rhsDate ? (lhsTie >= rhsTie ? self : other) : (lhsDate > rhsDate ? self : other)
+        var result = WordStat(
+            learned: latest.learned,
             unknownCount: max(unknownCount, other.unknownCount),
             skippedCount: max(skippedCount, other.skippedCount),
             seenCount: max(seenCount, other.seenCount),
             lastAction: latest.lastAction,
             updatedAt: max(updatedAt, other.updatedAt)
         )
+        result.lastFeedbackAt = latest.lastFeedbackAt
+        result.lastSeenAt = [lastSeenAt, other.lastSeenAt].compactMap { $0 }.max()
+        result.postponedUntil = latest.postponedUntil
+        result.legacyDueAt = latest.legacyDueAt
+        result.review = ScheduledReview.merge(review, other.review)
+        return result
     }
 }
 
@@ -131,9 +147,9 @@ public struct VocabularyProgress: Codable, Equatable {
     public mutating func mark(dictionaryID: String, term: String, action: WordAction, at date: Date = Date()) {
         let key = WordStat.key(dictionaryID: dictionaryID, term: term)
         var stat = stats[key] ?? WordStat()
-        stat.seenCount += 1
         stat.lastAction = action
         stat.updatedAt = date
+        stat.lastFeedbackAt = date
 
         switch action {
         case .known:
@@ -143,6 +159,8 @@ public struct VocabularyProgress: Codable, Equatable {
             stat.unknownCount += 1
         case .skipped:
             stat.skippedCount += 1
+        case .hard:
+            stat.learned = false
         }
 
         stats[key] = stat
@@ -151,7 +169,11 @@ public struct VocabularyProgress: Codable, Equatable {
     public mutating func recordSeen(dictionaryID: String, term: String, at date: Date = Date()) {
         let key = WordStat.key(dictionaryID: dictionaryID, term: term)
         var stat = stats[key] ?? WordStat()
+        if stat.lastFeedbackAt == nil, stat.lastAction != nil {
+            stat.lastFeedbackAt = stat.updatedAt
+        }
         stat.seenCount += 1
+        stat.lastSeenAt = date
         stat.updatedAt = date
         stats[key] = stat
     }

@@ -6,6 +6,8 @@ import QuartzCore
 protocol PetContentViewDelegate: AnyObject {
     func markKnown()
     func markUnknown()
+    func markHard()
+    func revealVocabularyAnswer()
     func skipWord()
     func requestVocabularyNow()
     func openSettings()
@@ -29,6 +31,8 @@ final class PetContentView: NSView {
     private let knownButton = NSButton(title: "认识啦", target: nil, action: nil)
     private let unknownButton = NSButton(title: "不认识", target: nil, action: nil)
     private let skipButton = NSButton(title: "先跳过", target: nil, action: nil)
+    private let hardButton = NSButton(title: "有点印象", target: nil, action: nil)
+    private let revealButton = NSButton(title: "查看释义", target: nil, action: nil)
     private let petContainer = NSView()
     private let imageView = NSImageView()
     private let videoView = NSView()
@@ -45,6 +49,7 @@ final class PetContentView: NSView {
     private var spriteFrameElapsed: TimeInterval = 0
     private var frameTimer: Timer?
     private var bubbleHideTimer: Timer?
+    private var bubbleRevision = 0
     private var clickStartedOnPet = false
     private var didDrag = false
     private let frameTimerInterval: TimeInterval = 1.0 / 30.0
@@ -85,6 +90,7 @@ final class PetContentView: NSView {
         bodyAlignment: NSTextAlignment = .center
     ) {
         bubbleHideTimer?.invalidate()
+        bubbleRevision += 1
         let cleanKicker = kicker.trimmingCharacters(in: .whitespacesAndNewlines)
         kickerLabel.stringValue = cleanKicker
         kickerLabel.isHidden = cleanKicker.isEmpty
@@ -95,10 +101,13 @@ final class PetContentView: NSView {
         setBodyText(body, alignment: bodyAlignment, presentation: presentation)
         bodyLabel.isHidden = body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         footerLabel.stringValue = footer ?? ""
+        footerLabel.font = .monospacedSystemFont(ofSize: 14, weight: .medium)
         footerLabel.isHidden = footer?.isEmpty ?? true
         knownButton.isHidden = !showActions
         unknownButton.isHidden = !showActions
         skipButton.isHidden = !showActions
+        hardButton.isHidden = true
+        revealButton.isHidden = true
         bubbleView.randomizeStyle()
         bubbleView.isHidden = false
         NSAnimationContext.runAnimationGroup { context in
@@ -118,13 +127,18 @@ final class PetContentView: NSView {
     }
 
     func hideBubble(animated: Bool) {
+        bubbleRevision += 1
+        let revision = bubbleRevision
         bubbleHideTimer?.invalidate()
         bubbleHideTimer = nil
         knownButton.isHidden = true
         unknownButton.isHidden = true
         skipButton.isHidden = true
+        hardButton.isHidden = true
+        revealButton.isHidden = true
 
         let complete = { [weak self] in
+            guard self?.bubbleRevision == revision else { return }
             self?.bubbleView.isHidden = true
             self?.bubbleView.alphaValue = 0
         }
@@ -153,6 +167,22 @@ final class PetContentView: NSView {
             defaultPixelPet.isHidden = image != nil
         }
         startBreathingAnimation()
+    }
+
+    func configureVocabularyControls(revealed: Bool, known: String, unknown: String, hard: String) {
+        revealButton.isHidden = revealed
+        knownButton.isHidden = !revealed
+        unknownButton.isHidden = !revealed
+        hardButton.isHidden = !revealed
+        knownButton.title = "认识啦"
+        unknownButton.title = "不认识"
+        skipButton.title = "稍后再看"
+        knownButton.toolTip = "下次复习：\(known)"
+        unknownButton.toolTip = "下次复习：\(unknown)"
+        hardButton.toolTip = "想起来了但费力；下次复习：\(hard)"
+        footerLabel.stringValue += revealed ? "\n不认识 \(unknown) · 印象 \(hard) · 认识 \(known)" : ""
+        footerLabel.font = .systemFont(ofSize: 11, weight: .medium)
+        footerLabel.maximumNumberOfLines = 2
     }
 
     func setPetRenderer(_ renderer: PetAnimationRenderer?, fallbackImage: NSImage?) {
@@ -298,7 +328,7 @@ final class PetContentView: NSView {
         footerLabel.textColor = NSColor(calibratedWhite: 0.56, alpha: 1)
         footerLabel.alignment = .center
 
-        let buttonStack = NSStackView(views: [knownButton, unknownButton, skipButton])
+        let buttonStack = NSStackView(views: [unknownButton, hardButton, knownButton])
         buttonStack.orientation = .horizontal
         buttonStack.spacing = 12
         buttonStack.alignment = .centerY
@@ -309,11 +339,17 @@ final class PetContentView: NSView {
         unknownButton.action = #selector(unknownTapped)
         skipButton.target = self
         skipButton.action = #selector(skipTapped)
+        hardButton.target = self
+        hardButton.action = #selector(hardTapped)
+        revealButton.target = self
+        revealButton.action = #selector(revealTapped)
         styleActionButton(knownButton, background: NSColor(calibratedRed: 0.31, green: 0.63, blue: 0.96, alpha: 1), foreground: .white)
         styleActionButton(unknownButton, background: NSColor(calibratedRed: 1.0, green: 0.64, blue: 0.42, alpha: 1), foreground: .white)
         styleActionButton(skipButton, background: NSColor(calibratedWhite: 0.50, alpha: 1), foreground: .white)
+        styleActionButton(hardButton, background: .systemTeal, foreground: .white)
+        styleActionButton(revealButton, background: .systemBlue, foreground: .white)
 
-        let textStack = NSStackView(views: [kickerLabel, titleLabel, bodyLabel, footerLabel, buttonStack])
+        let textStack = NSStackView(views: [kickerLabel, titleLabel, bodyLabel, footerLabel, revealButton, buttonStack, skipButton])
         textStack.translatesAutoresizingMaskIntoConstraints = false
         textStack.orientation = .vertical
         textStack.alignment = .width
@@ -364,10 +400,13 @@ final class PetContentView: NSView {
 
             knownButton.widthAnchor.constraint(greaterThanOrEqualToConstant: 86),
             unknownButton.widthAnchor.constraint(greaterThanOrEqualToConstant: 86),
+            hardButton.widthAnchor.constraint(greaterThanOrEqualToConstant: 86),
             skipButton.widthAnchor.constraint(greaterThanOrEqualToConstant: 86),
             knownButton.heightAnchor.constraint(equalToConstant: 32),
             unknownButton.heightAnchor.constraint(equalToConstant: 32),
             skipButton.heightAnchor.constraint(equalToConstant: 32),
+            hardButton.heightAnchor.constraint(equalToConstant: 32),
+            revealButton.heightAnchor.constraint(equalToConstant: 32),
 
             petContainer.centerXAnchor.constraint(equalTo: centerXAnchor),
             petContainer.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -14),
@@ -564,6 +603,9 @@ final class PetContentView: NSView {
     @objc private func unknownTapped() {
         delegate?.markUnknown()
     }
+
+    @objc private func hardTapped() { delegate?.markHard() }
+    @objc private func revealTapped() { delegate?.revealVocabularyAnswer() }
 
     @objc private func skipTapped() {
         delegate?.skipWord()

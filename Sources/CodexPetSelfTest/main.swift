@@ -82,7 +82,7 @@ struct CodexPetSelfTest {
             key: WordStat(learned: false, unknownCount: 3, skippedCount: 2, seenCount: 5, lastAction: .unknown, updatedAt: new)
         ]
         let merged = LearningSync.merge(local: local, remote: remote)
-        precondition(merged[key]?.learned == true)
+        precondition(merged[key]?.learned == false)
         precondition(merged[key]?.unknownCount == 3)
         precondition(merged[key]?.skippedCount == 2)
         precondition(merged[key]?.seenCount == 5)

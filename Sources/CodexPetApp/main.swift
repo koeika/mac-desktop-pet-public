@@ -13,6 +13,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, PetContentViewDelegate
 
     private var activePet: PetAsset?
     private var activeWord: ScopedDictionaryEntry?
+    private var vocabularyAnswerRevealed = false
     private var progressPriorityUntil = Date.distantPast
     private var queuedVocabulary = false
     private var behaviorEngine = PetBehaviorEngine()
@@ -23,11 +24,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, PetContentViewDelegate
     private var idleCuteTimer: Timer?
     private var vocabularyQuestionTimer: Timer?
     private var nextAutomaticVocabularyAt = Date().addingTimeInterval(90)
+    private var vocabularyScheduleKey: String?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApplication.shared.setActivationPolicy(.regular)
         do {
-            store = try AppDataStore()
+            let testRoot = ProcessInfo.processInfo.environment["WHISKYCLING_DATA_DIR"].map { URL(fileURLWithPath: $0) }
+            store = try AppDataStore(root: testRoot)
+            if let port = ProcessInfo.processInfo.environment["WHISKYCLING_PORT"].flatMap(UInt16.init) {
+                store.settings.serverPort = port
+            }
         } catch {
             fatalError("Cannot initialize app store: \(error)")
         }
@@ -155,6 +161,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, PetContentViewDelegate
                 DispatchQueue.main.async {
                     self?.receiveProgress(event)
                 }
+            },
+            vocabularyToken: store.captureToken,
+            vocabularyHandler: { [weak self] method, body in
+                try DispatchQueue.main.sync {
+                    guard let self else { throw CaptureError.invalid("桌宠已退出。") }
+                    return try self.store.handleVocabularyRequest(method: method, body: body)
+                }
             }
         )
         do {
@@ -267,13 +280,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, PetContentViewDelegate
 
     private func showVocabularyRespectingPriority() {
         let now = Date()
+        let key = "\(VocabularyDisplayScheduler.todayKey(for: now))-\(store.settings.vocabularyStudyStartMinute)-\(store.settings.vocabularyStudyEndMinute)-\(store.settings.dailyVocabularyLimit)-\(store.settings.dailyNewVocabularyLimit)"
+        if let oldKey = vocabularyScheduleKey, oldKey != key {
+            clearActiveVocabularyQuestion()
+            contentView.hideBubble(animated: true)
+            nextAutomaticVocabularyAt = now
+        }
+        vocabularyScheduleKey = key
         store.resetVocabularyScheduleIfNeeded(now: now)
         guard activeWord == nil else { return }
         if Date() < progressPriorityUntil {
             queuedVocabulary = true
             return
         }
-        guard queuedVocabulary || now >= nextAutomaticVocabularyAt else { return }
+        guard now >= nextAutomaticVocabularyAt else { return }
         guard store.canShowAutomaticVocabulary(now: now) else { return }
         if queuedVocabulary || now >= nextAutomaticVocabularyAt {
             queuedVocabulary = false
@@ -285,16 +305,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, PetContentViewDelegate
 
     @discardableResult
     private func showVocabularyNow(isAutomatic: Bool = false) -> Bool {
-        let entries = store.enabledEntries()
-        guard let selected = VocabularyPicker.pick(
-            from: entries,
-            stats: store.vocabularyProgress.stats
-        ) else {
+        guard Date() >= progressPriorityUntil else { return false }
+        guard activeWord == nil else { return false }
+        guard let selected = store.nextReviewWord(automatic: isAutomatic) else {
             if !isAutomatic {
                 contentView.showMessage(
                     kicker: "词典",
-                    title: "没有可用词汇",
-                    body: "请在配置中心导入 CSV/JSON/PDF 词典，或启用内置示例词典。",
+                    title: "暂时没有待复习词",
+                    body: "可以收藏新词、启用词典，或等下次复习到期。",
                     showActions: false
                 )
             }
@@ -302,21 +320,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, PetContentViewDelegate
         }
         vocabularyQuestionTimer?.invalidate()
         activeWord = selected
-        if isAutomatic {
-            store.recordAutomaticVocabularyShown()
-        }
-        store.vocabularyProgress.recordSeen(dictionaryID: selected.dictionaryID, term: selected.entry.term)
-        store.saveLearningProgress()
+        vocabularyAnswerRevealed = !store.settings.vocabularyRecallMode
+        store.recordVocabularyPresentation(selected, automatic: isAutomatic)
         chooseRandomPet()
         setTemporaryAction(.jumping, duration: 1.2)
 
         contentView.showMessage(
             kicker: selected.dictionaryName,
             title: selected.entry.term,
-            body: vocabularyCardBody(for: selected),
+            body: vocabularyAnswerRevealed ? vocabularyCardBody(for: selected) : vocabularyPromptBody(for: selected),
             showActions: true,
             footer: vocabularyFooterText()
         )
+        configureVocabularyControls(for: selected)
         if !store.settings.vocabularyQuestionPersists {
             vocabularyQuestionTimer = Timer.scheduledTimer(withTimeInterval: 22, repeats: false) { [weak self] _ in
                 self?.clearActiveVocabularyQuestion()
@@ -329,12 +345,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate, PetContentViewDelegate
         return true
     }
 
+    private func vocabularyPromptBody(for word: ScopedDictionaryEntry) -> String {
+        let reading = cleanVocabularyField(word.entry.phonetic ?? word.entry.reading)
+        return reading.isEmpty ? "" : "发音：\(reading)"
+    }
+
+    private func configureVocabularyControls(for word: ScopedDictionaryEntry) {
+        contentView.configureVocabularyControls(revealed: vocabularyAnswerRevealed,
+            known: store.reviewPreview(word, action: .known),
+            unknown: store.reviewPreview(word, action: .unknown),
+            hard: store.reviewPreview(word, action: .hard))
+    }
+
+    func revealVocabularyAnswer() {
+        guard let word = activeWord, !vocabularyAnswerRevealed else { return }
+        vocabularyAnswerRevealed = true
+        contentView.showMessage(kicker: word.dictionaryName, title: word.entry.term,
+            body: vocabularyCardBody(for: word), showActions: true, footer: vocabularyFooterText())
+        configureVocabularyControls(for: word)
+    }
+
     private func vocabularyCardBody(for word: ScopedDictionaryEntry) -> String {
         var sections: [String] = []
         let reading = cleanVocabularyField(word.entry.phonetic ?? word.entry.reading)
         if !reading.isEmpty {
             if word.entry.phonetic != nil {
-                sections.append("发音：\(reading.hasPrefix("/") ? reading : "/\(reading)/")")
+                sections.append("发音：\(reading)")
             } else {
                 sections.append("读音：\(reading)")
             }
@@ -385,7 +421,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, PetContentViewDelegate
         let snapshot = VocabularyDisplayScheduler.resetIfNeeded(store.vocabularyScheduleSnapshot, now: date)
         let remainingWords = max(1, snapshot.dailyLimit - snapshot.shownCount)
         let remainingSeconds = VocabularyDisplayScheduler.secondsUntilStudyWindowEnd(snapshot, now: date)
-        let interval = max(60, remainingSeconds / Double(remainingWords))
+        let interval = max(60, remainingSeconds / Double(remainingWords + 1))
         nextAutomaticVocabularyAt = date.addingTimeInterval(interval * Double.random(in: 0.75...1.25))
     }
 
@@ -445,35 +481,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate, PetContentViewDelegate
     }
 
     func markKnown() {
-        guard let word = activeWord else { return }
-        vocabularyQuestionTimer?.invalidate()
-        vocabularyQuestionTimer = nil
-        store.vocabularyProgress.mark(dictionaryID: word.dictionaryID, term: word.entry.term, action: .known)
-        store.saveLearningProgress()
-        setTemporaryAction(.waving, duration: 1.6)
-        activeWord = nil
-        contentView.hideBubble(animated: true)
+        finishVocabularyFeedback(.known)
     }
 
     func markUnknown() {
-        guard let word = activeWord else { return }
-        vocabularyQuestionTimer?.invalidate()
-        vocabularyQuestionTimer = nil
-        store.vocabularyProgress.mark(dictionaryID: word.dictionaryID, term: word.entry.term, action: .unknown)
-        store.saveLearningProgress()
-        setTemporaryAction(.review, duration: 1.6)
-        activeWord = nil
-        contentView.hideBubble(animated: true)
+        finishVocabularyFeedback(.unknown)
     }
 
+    func markHard() { finishVocabularyFeedback(.hard) }
+
     func skipWord() {
+        finishVocabularyFeedback(.skipped)
+    }
+
+    private func finishVocabularyFeedback(_ action: WordAction) {
         guard let word = activeWord else { return }
-        vocabularyQuestionTimer?.invalidate()
-        vocabularyQuestionTimer = nil
-        store.vocabularyProgress.mark(dictionaryID: word.dictionaryID, term: word.entry.term, action: .skipped)
-        store.saveLearningProgress()
-        setTemporaryAction(.idle, duration: 0.8)
-        activeWord = nil
+        guard action == .skipped || vocabularyAnswerRevealed else { return }
+        do { try store.reviewWord(word, action: action) }
+        catch {
+            contentView.showMessage(kicker: "保存失败", title: word.entry.term,
+                body: error.localizedDescription, showActions: true)
+            configureVocabularyControls(for: word)
+            return
+        }
+        setTemporaryAction(action == .known ? .waving : .review, duration: 1.6)
+        clearActiveVocabularyQuestion()
         contentView.hideBubble(animated: true)
     }
 
@@ -708,6 +740,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, PetContentViewDelegate
 }
 
 let app = NSApplication.shared
+if CommandLine.arguments.contains("--self-test-notebook") {
+    do { try MainActor.assumeIsolated { try NotebookRegression.run() } }
+    catch { fputs("notebook-regression failed: \(error)\n", stderr); exit(1) }
+    exit(0)
+}
 let delegate = AppDelegate()
 app.delegate = delegate
 app.run()

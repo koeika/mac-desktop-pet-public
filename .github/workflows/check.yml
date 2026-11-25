@@ -1,0 +1,16 @@
+name: Regression
+on:
+  push:
+    branches: [main, "codex/**"]
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  regression:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - run: swift test
+      - run: swift run codex-pet-selftest
+      - run: node --test ChromeExtension/tests/client.test.mjs
+      - run: swift run whiskycolin --self-test-notebook

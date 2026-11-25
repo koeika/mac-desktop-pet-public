@@ -96,9 +96,10 @@ public enum VocabularyDisplayScheduler {
         calendar: Calendar = .current
     ) -> (start: Date, end: Date) {
         let updated = normalized(snapshot)
-        let dayStart = calendar.startOfDay(for: now)
-        let start = dayStart.addingTimeInterval(TimeInterval(updated.studyStartMinute * 60))
-        let end = dayStart.addingTimeInterval(TimeInterval(updated.studyEndMinute * 60))
+        let start = calendar.date(bySettingHour: updated.studyStartMinute / 60,
+            minute: updated.studyStartMinute % 60, second: 0, of: now)!
+        let end = calendar.date(bySettingHour: updated.studyEndMinute / 60,
+            minute: updated.studyEndMinute % 60, second: 0, of: now)!
         return (start, end)
     }
 

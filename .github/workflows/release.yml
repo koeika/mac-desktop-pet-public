@@ -18,7 +18,12 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Build release binaries
-        run: swift build -c release
+        run: |
+          swift test
+          swift run codex-pet-selftest
+          node --test ChromeExtension/tests/client.test.mjs
+          swift build -c release
+          .build/release/whiskycolin --self-test-notebook
 
       - name: Package Whisky&Cling
         run: |
@@ -39,6 +44,7 @@ jobs:
           cp .build/release/petctl "${dist_dir}/bin/petctl"
           cp -R .build/release/CodexDesktopPet_CodexPetApp.bundle "${app_dir}/Contents/Resources/CodexDesktopPet_CodexPetApp.bundle"
           cp Sources/CodexPetApp/Resources/AppIcon.icns "${app_dir}/Contents/Resources/AppIcon.icns"
+          cp -R ChromeExtension "${app_dir}/Contents/Resources/ChromeExtension"
           chmod +x "${app_dir}/Contents/MacOS/whiskycolin"
           chmod +x "${dist_dir}/bin/petctl"
 
@@ -78,6 +84,7 @@ jobs:
           cp README.md LICENSE "${dist_dir}/"
           cp -R examples "${dist_dir}/examples"
           cp -R skills "${dist_dir}/skills"
+          cp -R ChromeExtension "${dist_dir}/ChromeExtension"
           mkdir -p "${dist_dir}/Scripts"
           cp Scripts/install-codex-skill.sh "${dist_dir}/Scripts/install-codex-skill.sh"
           chmod +x "${dist_dir}/Scripts/install-codex-skill.sh"
@@ -92,6 +99,17 @@ jobs:
           3. 如果 macOS 提示来自未认证开发者，请右键 `Whisky&Cling.app`，选择 `打开`。
 
           当前 release 未签名、未做 Developer ID 公证。
+
+          ## 网页生词收藏
+
+          1. Chrome 打开 chrome://extensions，开启开发者模式。
+          2. 选择“加载已解压的扩展程序”，选择随包的 ChromeExtension 文件夹。
+          3. 桌宠配置中心 -> 词典学习 -> 我的生词本 -> 复制 Chrome 配对码。
+          4. 在扩展的“桌宠配对”中粘贴配对码并保存。
+          5. 网页选中单词，右键“加入 Whisky&Cling 生词本”，核对音标、释义和原句后保存。
+
+          释义为空的词可在配置中心用 DeepSeek 补全后开始学习。
+          桌宠关闭时收藏暂存在扩展，开启后每两分钟重试，也可以手动重试。
 
           ## 使用 petctl 上报 AI 进度
 

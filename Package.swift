@@ -13,8 +13,13 @@ let package = Package(
         .executable(name: "petctl", targets: ["PetCTL"]),
         .executable(name: "codex-pet-selftest", targets: ["CodexPetSelfTest"])
     ],
+    dependencies: [
+        .package(url: "https://github.com/open-spaced-repetition/swift-fsrs.git", exact: "6.0.0")
+    ],
     targets: [
-        .target(name: "CodexPetCore"),
+        .target(name: "CodexPetCore", dependencies: [.product(name: "FSRS", package: "swift-fsrs")]),
+        .testTarget(name: "CodexPetCoreTests", dependencies: ["CodexPetCore"]),
+        .testTarget(name: "CodexPetAppTests", dependencies: ["CodexPetApp"]),
         .executableTarget(
             name: "CodexPetApp",
             dependencies: ["CodexPetCore"],

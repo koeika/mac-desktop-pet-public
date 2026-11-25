@@ -688,6 +688,8 @@ struct DictionaryTab: View {
 
                 learningPacePanel
 
+                PersonalVocabularyPanel(store: store)
+
                 openAISettingsPanel
 
                 dictionaryCategoryFilter

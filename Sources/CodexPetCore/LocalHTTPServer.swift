@@ -7,15 +7,21 @@ public final class LocalHTTPServer {
     private var listener: NWListener?
     private let stateProvider: () -> AgentState
     private let eventHandler: (ProgressEvent) -> Void
+    private let vocabularyToken: String?
+    private let vocabularyHandler: ((String, Data) throws -> Data)?
 
     public init(
         port: UInt16 = 4789,
         stateProvider: @escaping () -> AgentState,
-        eventHandler: @escaping (ProgressEvent) -> Void
+        eventHandler: @escaping (ProgressEvent) -> Void,
+        vocabularyToken: String? = nil,
+        vocabularyHandler: ((String, Data) throws -> Data)? = nil
     ) {
         self.port = port
         self.stateProvider = stateProvider
         self.eventHandler = eventHandler
+        self.vocabularyToken = vocabularyToken
+        self.vocabularyHandler = vocabularyHandler
     }
 
     public func start() throws {
@@ -46,6 +52,10 @@ public final class LocalHTTPServer {
             if let data {
                 nextBuffer.append(data)
             }
+            guard nextBuffer.count <= 128 * 1024 else {
+                self.respond(status: 413, body: ErrorResponse(ok: false, error: "Request too large"), on: connection)
+                return
+            }
             if let request = HTTPRequest(data: nextBuffer), request.isComplete || isComplete || error != nil {
                 self.handle(request, connection: connection)
                 return
@@ -61,6 +71,26 @@ public final class LocalHTTPServer {
     private func handle(_ request: HTTPRequest, connection: NWConnection) {
         if request.method == "OPTIONS" {
             respond(status: 204, rawBody: Data(), on: connection)
+            return
+        }
+
+        if request.path == "/v1/vocabulary" {
+            guard let token = vocabularyToken, !token.isEmpty,
+                  request.headers["authorization"] == "Bearer \(token)" else {
+                respond(status: 401, body: ErrorResponse(ok: false, error: "请在 Chrome 扩展中填写桌宠配对码。"), on: connection)
+                return
+            }
+            guard ["GET", "POST"].contains(request.method), let vocabularyHandler else {
+                respond(status: 404, body: ErrorResponse(ok: false, error: "Not found"), on: connection)
+                return
+            }
+            do {
+                respond(status: request.method == "POST" ? 201 : 200,
+                    rawBody: try vocabularyHandler(request.method, request.body), on: connection)
+            } catch {
+                respond(status: error is CaptureError || error is DecodingError ? 400 : 500,
+                    body: ErrorResponse(ok: false, error: error.localizedDescription), on: connection)
+            }
             return
         }
 
@@ -102,7 +132,7 @@ public final class LocalHTTPServer {
         header += "Content-Type: application/json; charset=utf-8\r\n"
         header += "Access-Control-Allow-Origin: *\r\n"
         header += "Access-Control-Allow-Methods: GET, POST, OPTIONS\r\n"
-        header += "Access-Control-Allow-Headers: content-type\r\n"
+        header += "Access-Control-Allow-Headers: content-type, authorization\r\n"
         header += "Content-Length: \(rawBody.count)\r\n"
         header += "Connection: close\r\n\r\n"
         var response = Data(header.utf8)
@@ -133,6 +163,7 @@ private struct HTTPRequest {
     var path: String
     var body: Data
     var isComplete: Bool
+    var headers: [String: String] = [:]
 
     init?(data: Data) {
         guard let delimiter = data.range(of: Data("\r\n\r\n".utf8)) else { return nil }
@@ -149,8 +180,11 @@ private struct HTTPRequest {
         for line in lines.dropFirst() {
             let pieces = line.split(separator: ":", maxSplits: 1).map(String.init)
             if pieces.count == 2, pieces[0].lowercased() == "content-length" {
-                contentLength = Int(pieces[1].trimmingCharacters(in: .whitespacesAndNewlines)) ?? 0
+                guard let length = Int(pieces[1].trimmingCharacters(in: .whitespacesAndNewlines)),
+                      length >= 0, length <= 128 * 1024 else { return nil }
+                contentLength = length
             }
+            if pieces.count == 2 { headers[pieces[0].lowercased()] = pieces[1].trimmingCharacters(in: .whitespacesAndNewlines) }
         }
 
         let bodyStart = delimiter.upperBound
@@ -167,6 +201,8 @@ private enum HTTPStatus {
         case 201: return "Created"
         case 204: return "No Content"
         case 400: return "Bad Request"
+        case 401: return "Unauthorized"
+        case 413: return "Payload Too Large"
         case 404: return "Not Found"
         case 500: return "Internal Server Error"
         default: return "OK"
