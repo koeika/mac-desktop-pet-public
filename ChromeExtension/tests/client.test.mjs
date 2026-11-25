@@ -32,4 +32,8 @@ test("copied translation keeps explicit IPA and definition, with no invented con
     term:"inherently",phoneticUS:"/ɪnˈherəntli/",phoneticUK:"/ɪnˈhɪərəntli/",meaning:"adv. 本质上；固有地"
   });
   assert.deepEqual(parseCopiedEntry("random webpage instructions","word"),{term:"word"});
+  const split = parseCopiedEntry("inherently\nadv.\n本质上；固有地\nThe system is inherently flawed.\n这个系统本质上存在缺陷。","inherently");
+  assert.equal(split.meaning,"adv. 本质上；固有地");
+  assert.equal(split.example,"The system is inherently flawed.");
+  assert.equal(split.exampleTranslation,"这个系统本质上存在缺陷。");
 });
