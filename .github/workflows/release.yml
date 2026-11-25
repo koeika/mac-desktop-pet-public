@@ -83,6 +83,7 @@ jobs:
           codesign --verify --deep --strict --verbose=2 "${app_dir}"
 
           cp README.md LICENSE "${dist_dir}/"
+          cp -R docs "${dist_dir}/docs"
           cp -R examples "${dist_dir}/examples"
           cp -R skills "${dist_dir}/skills"
           cp -R ChromeExtension "${dist_dir}/ChromeExtension"
@@ -143,4 +144,4 @@ jobs:
           asset="dist/whiskycolin-${version}-macos-arm64.zip"
           gh release create "${version}" "${asset}" \
             --title "Whisky&Cling ${version}" \
-            --notes "macOS 14+ release package. Includes Whisky&Cling.app, petctl, Codex skill installer, README, install notes, and dictionary import templates. This build uses ad-hoc signing and is not notarized."
+            --notes "macOS 14+ Apple Silicon. Adds paired Chrome vocabulary capture, offline queue, local FSRS-6 review and recall-first word bubbles. Includes the ChromeExtension folder, Codex skill installer and illustrated instructions. This build uses ad-hoc signing and is not notarized."
