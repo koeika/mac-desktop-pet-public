@@ -17,6 +17,7 @@ struct AppSettings: Codable {
     var syncFilePath: String?
     var logPaths: [String] = []
     var walkingPaused: Bool = false
+    var petOnlyWithVocabulary = false
     var positionLocked: Bool = false
     var lastWindowOrigin: CGPoint?
     var movementSpeedMultiplier: Double = 0.10
@@ -51,6 +52,7 @@ struct AppSettings: Codable {
         case syncFilePath
         case logPaths
         case walkingPaused
+        case petOnlyWithVocabulary
         case positionLocked
         case lastWindowOrigin
         case movementSpeedMultiplier
@@ -80,6 +82,7 @@ struct AppSettings: Codable {
         syncFilePath = try container.decodeIfPresent(String.self, forKey: .syncFilePath)
         logPaths = try container.decodeIfPresent([String].self, forKey: .logPaths) ?? []
         walkingPaused = try container.decodeIfPresent(Bool.self, forKey: .walkingPaused) ?? false
+        petOnlyWithVocabulary = try container.decodeIfPresent(Bool.self, forKey: .petOnlyWithVocabulary) ?? false
         positionLocked = try container.decodeIfPresent(Bool.self, forKey: .positionLocked) ?? false
         lastWindowOrigin = try container.decodeIfPresent(CGPoint.self, forKey: .lastWindowOrigin)
         movementSpeedMultiplier = try container.decodeIfPresent(Double.self, forKey: .movementSpeedMultiplier) ?? 0.10
@@ -380,6 +383,16 @@ final class AppDataStore: ObservableObject {
         objectWillChange.send()
         settings = updated
         NotificationCenter.default.post(name: .companionThemeDidChange, object: self)
+    }
+
+    func setPetOnlyWithVocabulary(_ enabled: Bool) throws {
+        guard settings.petOnlyWithVocabulary != enabled else { return }
+        var updated = settings
+        updated.petOnlyWithVocabulary = enabled
+        try JSONFileStore.save(updated, to: settingsURL)
+        objectWillChange.send()
+        settings = updated
+        NotificationCenter.default.post(name: .petVisibilityPreferenceDidChange, object: self)
     }
 
     func saveLearningProgress() {

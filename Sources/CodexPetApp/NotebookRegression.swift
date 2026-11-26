@@ -72,9 +72,10 @@ enum NotebookRegression {
         print("enrichment-regression: model migration, custom endpoint preservation, HTTP diagnostics, local fallback, opt-in and successful bilingual enrichment passed (fixture transport; no live key)")
     }
 
-    @MainActor static func run() throws {
+    @MainActor static func run() async throws {
         precondition(AppBrand.displayName == "PetPetKnows")
         try SettingsRedesignRegression.run()
+        try await PetVisibilityRegression.run()
         try VocabularyCardRegression.run()
         try CompanionProgressRegression.run()
         try CompanionVisualRegression.run()

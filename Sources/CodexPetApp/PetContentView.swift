@@ -32,6 +32,8 @@ private final class PetTextDocument: NSView {
 final class PetContentView: NSView {
     weak var delegate: PetContentViewDelegate?
     var canDragWindow = true
+    var onPresentationChange: (() -> Void)?
+    private var presentationUpdateDepth = 0
     private(set) var visualTheme: AppVisualTheme = .comic
 
     func applyTheme(_ theme: AppVisualTheme) {
@@ -108,6 +110,29 @@ final class PetContentView: NSView {
         !bubbleView.isHidden || progressStack.hasVisibleEvents
     }
 
+    var hasVisibleVocabularyCard: Bool { !bubbleView.isHidden && bubbleView.style == .vocabulary }
+    var isPetVisible: Bool { !petContainer.isHidden }
+
+    func setPetVisible(_ visible: Bool) {
+        guard petContainer.isHidden == visible else { return }
+        petContainer.isHidden = !visible
+        if visible {
+            player?.play()
+            startBreathingAnimation()
+        } else {
+            player?.pause()
+            petContainer.layer?.removeAllAnimations()
+            clickStartedOnPet = false
+            dragStartPoint = nil
+            dragWindowOrigin = nil
+            didDrag = false
+        }
+    }
+
+    private func notifyPresentationChange() {
+        if presentationUpdateDepth == 0 { onPresentationChange?() }
+    }
+
     var progressPriorityDeadline: Date? { progressStack.priorityDeadline }
 
     var visualLayoutSnapshot: (pet: NSRect, message: NSRect, progress: NSRect, titleFont: CGFloat) {
@@ -115,6 +140,8 @@ final class PetContentView: NSView {
     }
 
     func showProgressEvent(_ event: ProgressEvent) {
+        presentationUpdateDepth += 1
+        defer { presentationUpdateDepth -= 1; notifyPresentationChange() }
         hideBubble(animated: false, preservingProgress: true)
         vocabularyEntry = nil
         vocabularyTextView.isHidden = true
@@ -138,6 +165,8 @@ final class PetContentView: NSView {
 
     func showVocabularyCard(kicker: String, entry: DictionaryEntry, revealed: Bool, footer: String,
                             known: String, unknown: String, hard: String, translationStatus: String? = nil) {
+        presentationUpdateDepth += 1
+        defer { presentationUpdateDepth -= 1; notifyPresentationChange() }
         let key = kicker + "|" + entry.term
         let sameWord = vocabularyLayoutKey == key
         let samePresentation = sameWord && vocabularyRevealed == revealed
@@ -166,6 +195,8 @@ final class PetContentView: NSView {
 
     func showVocabularyCard(kicker: String, title: String, prompt: String, answer: String,
                             revealed: Bool, footer: String, known: String, unknown: String, hard: String) {
+        presentationUpdateDepth += 1
+        defer { presentationUpdateDepth -= 1; notifyPresentationChange() }
         let key = kicker + "|" + title
         let previousSize = vocabularyLayoutKey == key && vocabularyRevealed == revealed ? lockedVocabularySize : nil
         showMessage(kicker: kicker, title: title, body: revealed ? answer : prompt,
@@ -211,6 +242,8 @@ final class PetContentView: NSView {
         bodyAlignment: NSTextAlignment = .center,
         animated: Bool = true
     ) {
+        presentationUpdateDepth += 1
+        defer { presentationUpdateDepth -= 1; notifyPresentationChange() }
         bubbleHideTimer?.invalidate()
         progressStack.clear()
         messagePresentation = presentation
@@ -281,9 +314,10 @@ final class PetContentView: NSView {
         revealButton.isHidden = true
 
         let complete = { [weak self] in
-            guard self?.bubbleRevision == revision else { return }
-            self?.bubbleView.isHidden = true
-            self?.bubbleView.alphaValue = 0
+            guard let self, self.bubbleRevision == revision else { return }
+            self.bubbleView.isHidden = true
+            self.bubbleView.alphaValue = 0
+            self.notifyPresentationChange()
         }
         guard animated, !bubbleView.isHidden else {
             complete()
@@ -394,7 +428,7 @@ final class PetContentView: NSView {
             name: .AVPlayerItemDidPlayToEndTime,
             object: item
         )
-        player.play()
+        if !petContainer.isHidden { player.play() }
         applyActionAnimation(currentAction)
     }
 
@@ -408,7 +442,7 @@ final class PetContentView: NSView {
     }
 
     override func mouseDown(with event: NSEvent) {
-        guard petContainer.frame.contains(convert(event.locationInWindow, from: nil)) else {
+        guard !petContainer.isHidden, petContainer.frame.contains(convert(event.locationInWindow, from: nil)) else {
             clickStartedOnPet = false
             didDrag = false
             dragStartPoint = nil
@@ -434,7 +468,7 @@ final class PetContentView: NSView {
     }
 
     override func menu(for event: NSEvent) -> NSMenu? {
-        guard petContainer.frame.contains(convert(event.locationInWindow, from: nil)) else { return nil }
+        guard !petContainer.isHidden, petContainer.frame.contains(convert(event.locationInWindow, from: nil)) else { return nil }
         clickStartedOnPet = false
         didDrag = false
         dragStartPoint = nil
@@ -493,6 +527,7 @@ final class PetContentView: NSView {
             didDrag = false
         }
         guard clickStartedOnPet,
+              !petContainer.isHidden,
               !didDrag,
               petContainer.frame.contains(event.locationInWindow) else {
             return
@@ -507,7 +542,7 @@ final class PetContentView: NSView {
         if progressStack.hasVisibleEvents, progressStack.frame.contains(point) {
             return super.hitTest(point)
         }
-        if petContainer.frame.contains(point) {
+        if !petContainer.isHidden, petContainer.frame.contains(point) {
             return self
         }
         return nil
@@ -520,7 +555,10 @@ final class PetContentView: NSView {
         bubbleView.translatesAutoresizingMaskIntoConstraints = false
         addSubview(bubbleView)
         addSubview(progressStack)
-        progressStack.onChange = { [weak self] in self?.needsLayout = true }
+        progressStack.onChange = { [weak self] in
+            self?.needsLayout = true
+            self?.notifyPresentationChange()
+        }
 
         kickerLabel.font = .systemFont(ofSize: 14, weight: .heavy)
         kickerLabel.textColor = NSColor(calibratedWhite: 0.38, alpha: 1)
@@ -839,6 +877,7 @@ final class PetContentView: NSView {
     }
 
     private func advanceAnimationFrame() {
+        guard !petContainer.isHidden, window?.isVisible != false else { return }
         if animationRenderer != nil {
             spriteFrameElapsed += frameTimerInterval
             guard spriteFrameElapsed >= spriteFrameInterval else { return }
@@ -955,8 +994,11 @@ final class PetContentView: NSView {
 
     @objc private func videoDidFinish(_ notification: Notification) {
         guard let item = notification.object as? AVPlayerItem else { return }
-        item.seek(to: .zero, completionHandler: nil)
-        player?.play()
+        DispatchQueue.main.async { [weak self, weak item] in
+            guard let self, let item, self.player?.currentItem === item else { return }
+            item.seek(to: .zero, completionHandler: nil)
+            if !self.petContainer.isHidden, self.window?.isVisible != false { self.player?.play() }
+        }
     }
 
     @objc private func knownTapped() {

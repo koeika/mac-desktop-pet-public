@@ -6,6 +6,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, PetContentViewDelegate
     private var store: AppDataStore!
     private var window: NSPanel!
     private var contentView: PetContentView!
+    private var petVisibility: PetVisibilityController!
     private var statusItem: NSStatusItem!
     private var settingsWindowController: SettingsWindowController?
     private var httpServer: LocalHTTPServer?
@@ -92,7 +93,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, PetContentViewDelegate
         contentView.applyTheme(store.settings.visualTheme)
         NotificationCenter.default.addObserver(self, selector: #selector(applyVisualTheme), name: .companionThemeDidChange, object: store)
         window.contentView = contentView
-        window.orderFrontRegardless()
+        petVisibility = PetVisibilityController(window: window, contentView: contentView, store: store)
         behaviorEngine.snap(to: window.frame.origin)
     }
 
@@ -116,6 +117,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, PetContentViewDelegate
         menu.addItem(NSMenuItem.separator())
         menu.addItem(NSMenuItem(title: "显示 \(AppBrand.displayName)", action: #selector(showPet), keyEquivalent: ""))
         menu.addItem(NSMenuItem(title: "隐藏 \(AppBrand.displayName)", action: #selector(hidePet), keyEquivalent: ""))
+        menu.addItem(NSMenuItem(title: "仅在单词卡出现时显示宠物", action: #selector(toggleVocabularyOnlyPet), keyEquivalent: ""))
         menu.addItem(NSMenuItem.separator())
         menu.addItem(NSMenuItem(title: "上传宠物素材...", action: #selector(uploadPetPhotos), keyEquivalent: ""))
         menu.addItem(NSMenuItem(title: "导入 Codex pet 包...", action: #selector(importCodexPackage), keyEquivalent: ""))
@@ -145,6 +147,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, PetContentViewDelegate
         let wordItem = NSMenuItem(title: "现在抽一个词", action: #selector(wordNow), keyEquivalent: "n")
         wordItem.target = self
         applicationMenu.addItem(wordItem)
+        let visibilityItem = NSMenuItem(title: "仅在单词卡出现时显示宠物", action: #selector(toggleVocabularyOnlyPet), keyEquivalent: "")
+        visibilityItem.target = self
+        applicationMenu.addItem(visibilityItem)
+        applicationMenu.delegate = self
         applicationMenu.addItem(.separator())
         let quitItem = NSMenuItem(title: "退出 \(AppBrand.displayName)", action: #selector(quit), keyEquivalent: "q")
         quitItem.target = self
@@ -277,7 +283,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, PetContentViewDelegate
         if event.status == .done || event.status == .failed {
             queuedVocabulary = true
         }
-        if manualVocabularyTimer != nil { requestVocabularyNow() }
+        if manualVocabularyTimer != nil { resumeManualVocabularyRequest() }
     }
 
     private func showVocabularyRespectingPriority() {
@@ -497,13 +503,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, PetContentViewDelegate
     }
 
     func requestVocabularyNow() {
+        petVisibility.show()
+        resumeManualVocabularyRequest()
+    }
+
+    private func resumeManualVocabularyRequest() {
         manualVocabularyTimer?.invalidate()
         manualVocabularyTimer = nil
+        guard !petVisibility.isManuallyHidden else { return }
         guard activeWord == nil else { return }
         let remainingPriority = progressPriorityUntil.timeIntervalSinceNow
         if remainingPriority > 0 {
             manualVocabularyTimer = Timer.scheduledTimer(withTimeInterval: remainingPriority + 0.05, repeats: false) { [weak self] _ in
-                self?.requestVocabularyNow()
+                self?.resumeManualVocabularyRequest()
             }
             if let manualVocabularyTimer { RunLoop.main.add(manualVocabularyTimer, forMode: .common) }
             return
@@ -526,6 +538,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, PetContentViewDelegate
         for item in menu.items {
             if item.action == #selector(toggleWalking) { item.state = store.settings.walkingPaused ? .on : .off }
             if item.action == #selector(toggleLockPosition) { item.state = store.settings.positionLocked ? .on : .off }
+            if item.action == #selector(toggleVocabularyOnlyPet) { item.state = store.settings.petOnlyWithVocabulary ? .on : .off }
         }
     }
 
@@ -569,11 +582,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, PetContentViewDelegate
     }
 
     @objc private func showPet() {
-        window.orderFrontRegardless()
+        petVisibility.show()
+        if store.settings.petOnlyWithVocabulary { requestVocabularyNow() }
     }
 
     @objc private func hidePet() {
-        window.orderOut(nil)
+        manualVocabularyTimer?.invalidate()
+        manualVocabularyTimer = nil
+        petVisibility.hide()
+    }
+
+    @objc private func toggleVocabularyOnlyPet() {
+        do { try store.setPetOnlyWithVocabulary(!store.settings.petOnlyWithVocabulary) }
+        catch {
+            let alert = NSAlert()
+            alert.messageText = "显示设置未保存"
+            alert.informativeText = error.localizedDescription
+            alert.runModal()
+        }
     }
 
     @objc private func uploadPetPhotos() {
@@ -768,9 +794,12 @@ if CommandLine.arguments.contains("--self-test-enrichment") {
     exit(1)
 }
 if CommandLine.arguments.contains("--self-test-notebook") {
-    do { try MainActor.assumeIsolated { try NotebookRegression.run() } }
-    catch { fputs("notebook-regression failed: \(error)\n", stderr); exit(1) }
-    exit(0)
+    Task { @MainActor in
+        do { try await NotebookRegression.run(); exit(0) }
+        catch { fputs("notebook-regression failed: \(error)\n", stderr); exit(1) }
+    }
+    app.run()
+    exit(1)
 }
 let delegate = AppDelegate()
 app.delegate = delegate

@@ -4,6 +4,11 @@ import CodexPetCore
 @testable import CodexPetApp
 
 final class NotebookTests: XCTestCase {
+    @MainActor func testVocabularyOnlyPetVisibilityAndPreferencePersistence() async throws {
+        _ = NSApplication.shared
+        try await PetVisibilityRegression.run()
+    }
+
     @MainActor func testStoreCaptureReviewAndRestartPreserveBoth() async throws {
         _ = NSApplication.shared
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)

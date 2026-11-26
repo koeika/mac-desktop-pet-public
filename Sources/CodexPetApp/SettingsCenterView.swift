@@ -235,6 +235,7 @@ struct PetGalleryTab: View {
     @State private var selectedPetID: String?
     @State private var previewAction: CodexPetAction = .idle
     @State private var linkInstall = false
+    @State private var visibilityError: String?
 
     private var selectedPet: PetAsset? {
         store.pets.first { $0.id == selectedPetID } ?? store.enabledPets().first ?? store.pets.first
@@ -277,6 +278,9 @@ struct PetGalleryTab: View {
                 }
             )
         }
+        .alert("显示设置未保存", isPresented: Binding(get: { visibilityError != nil }, set: { if !$0 { visibilityError = nil } })) {
+            Button("好", role: .cancel) { visibilityError = nil }
+        } message: { Text(visibilityError ?? "") }
     }
 
     private var gallery: some View {
@@ -294,6 +298,16 @@ struct PetGalleryTab: View {
                 Spacer()
                 Button(action: actions.randomPreview) { Image(systemName: "shuffle") }.help("随机见一面")
             }
+            Toggle("仅在单词卡出现时显示宠物", isOn: Binding(
+                get: { store.settings.petOnlyWithVocabulary },
+                set: { enabled in
+                    do { try store.setPetOnlyWithVocabulary(enabled) }
+                    catch { visibilityError = error.localizedDescription }
+                }
+            ))
+            .toggleStyle(.switch).font(.subheadline)
+            .accessibilityIdentifier("pet-only-with-vocabulary")
+            .help("空闲时隐藏宠物；词卡关闭后隐藏。AI 通知单独显示，菜单栏仍可主动抽词。")
             if let pet = selectedPet {
                 VStack(spacing: 8) {
                     if theme == .forest {
