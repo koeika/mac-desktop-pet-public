@@ -13,5 +13,5 @@ jobs:
       - run: swift test
       - run: swift run codex-pet-selftest
       - run: node --test ChromeExtension/tests/*.test.mjs
-      - run: swift run whiskycolin --self-test-notebook
-      - run: swift run whiskycolin --self-test-enrichment
+      - run: swift run PetPetKnows --self-test-notebook
+      - run: swift run PetPetKnows --self-test-enrichment

@@ -56,7 +56,7 @@ extension AppDataStore {
             from: enabledEntries().filter { !$0.entry.meaning.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty },
             stats: vocabularyProgress.stats, capturedAt: capturedAt, now: now,
             newIntroducedToday: automatic ? settings.newVocabularyKeys.count : 0,
-            newLimit: automatic ? settings.dailyNewVocabularyLimit : Int.max,
+            newLimit: automatic && !settings.dailyNewVocabularyUnlimited ? settings.dailyNewVocabularyLimit : Int.max,
             reserveNewSlot: settings.vocabularyShownCount % 4 == 3,
             introducedKeys: Set(settings.newVocabularyKeys)
         )

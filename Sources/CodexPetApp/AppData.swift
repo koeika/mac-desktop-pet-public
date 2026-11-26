@@ -13,19 +13,23 @@ struct AppSettings: Codable {
     ]
 
     var serverPort: UInt16 = 4789
-    var enabledDictionaryIDs: Set<String> = Set(BuiltInDictionaries.packs.map(\.id))
+    var enabledDictionaryIDs: Set<String> = []
     var syncFilePath: String?
     var logPaths: [String] = []
     var walkingPaused: Bool = false
     var positionLocked: Bool = false
     var lastWindowOrigin: CGPoint?
-    var movementSpeedMultiplier: Double = 0.20
+    var movementSpeedMultiplier: Double = 0.10
     var visualTheme: AppVisualTheme = .comic
     var exampleProvider: ExampleProvider = .openAI
     var openAIModel: String = "gpt-5.2"
     var deepSeekModel: String = DeepSeekConfiguration.defaultModel
     var deepSeekBaseURL: String = "https://api.deepseek.com"
     var dailyVocabularyLimit: Int = 10
+    var dailyVocabularyUnlimited = false
+    var dailyNewVocabularyUnlimited = false
+    var vocabularyMinimumIntervalMinutes = 5
+    var lastAutomaticVocabularyDate: Date?
     var vocabularyWindowHours: Int = 6
     var vocabularyStudyStartMinute: Int = VocabularyDisplayScheduler.defaultStudyStartMinute
     var vocabularyStudyEndMinute: Int = VocabularyDisplayScheduler.defaultStudyEndMinute
@@ -56,6 +60,8 @@ struct AppSettings: Codable {
         case deepSeekModel
         case deepSeekBaseURL
         case dailyVocabularyLimit
+        case dailyVocabularyUnlimited, dailyNewVocabularyUnlimited, vocabularyMinimumIntervalMinutes
+        case lastAutomaticVocabularyDate
         case vocabularyWindowHours
         case vocabularyStudyStartMinute
         case vocabularyStudyEndMinute
@@ -70,18 +76,22 @@ struct AppSettings: Codable {
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         serverPort = try container.decodeIfPresent(UInt16.self, forKey: .serverPort) ?? 4789
-        enabledDictionaryIDs = try container.decodeIfPresent(Set<String>.self, forKey: .enabledDictionaryIDs) ?? Set(BuiltInDictionaries.packs.map(\.id))
+        enabledDictionaryIDs = try container.decodeIfPresent(Set<String>.self, forKey: .enabledDictionaryIDs) ?? []
         syncFilePath = try container.decodeIfPresent(String.self, forKey: .syncFilePath)
         logPaths = try container.decodeIfPresent([String].self, forKey: .logPaths) ?? []
         walkingPaused = try container.decodeIfPresent(Bool.self, forKey: .walkingPaused) ?? false
         positionLocked = try container.decodeIfPresent(Bool.self, forKey: .positionLocked) ?? false
         lastWindowOrigin = try container.decodeIfPresent(CGPoint.self, forKey: .lastWindowOrigin)
-        movementSpeedMultiplier = try container.decodeIfPresent(Double.self, forKey: .movementSpeedMultiplier) ?? 0.20
+        movementSpeedMultiplier = try container.decodeIfPresent(Double.self, forKey: .movementSpeedMultiplier) ?? 0.10
         visualTheme = (try container.decodeIfPresent(String.self, forKey: .visualTheme)).flatMap(AppVisualTheme.init(rawValue:)) ?? .comic
         exampleProvider = try container.decodeIfPresent(ExampleProvider.self, forKey: .exampleProvider) ?? .openAI
         openAIModel = try container.decodeIfPresent(String.self, forKey: .openAIModel) ?? "gpt-5.2"
         deepSeekModel = try container.decodeIfPresent(String.self, forKey: .deepSeekModel) ?? DeepSeekConfiguration.defaultModel
         deepSeekBaseURL = try container.decodeIfPresent(String.self, forKey: .deepSeekBaseURL) ?? "https://api.deepseek.com"
+        dailyVocabularyUnlimited = try container.decodeIfPresent(Bool.self, forKey: .dailyVocabularyUnlimited) ?? false
+        dailyNewVocabularyUnlimited = try container.decodeIfPresent(Bool.self, forKey: .dailyNewVocabularyUnlimited) ?? false
+        vocabularyMinimumIntervalMinutes = max(1, try container.decodeIfPresent(Int.self, forKey: .vocabularyMinimumIntervalMinutes) ?? 5)
+        lastAutomaticVocabularyDate = try container.decodeIfPresent(Date.self, forKey: .lastAutomaticVocabularyDate)
         dailyVocabularyLimit = VocabularyDisplayScheduler.normalizedDailyLimit(
             try container.decodeIfPresent(Int.self, forKey: .dailyVocabularyLimit) ?? 10
         )
@@ -100,7 +110,7 @@ struct AppSettings: Codable {
         vocabularyWindowStartDate = try container.decodeIfPresent(Date.self, forKey: .vocabularyWindowStartDate)
         vocabularyShownCountDate = try container.decodeIfPresent(String.self, forKey: .vocabularyShownCountDate)
         vocabularyShownCount = max(0, try container.decodeIfPresent(Int.self, forKey: .vocabularyShownCount) ?? 0)
-        dailyNewVocabularyLimit = min(20, max(0, try container.decodeIfPresent(Int.self, forKey: .dailyNewVocabularyLimit) ?? 3))
+        dailyNewVocabularyLimit = max(0, try container.decodeIfPresent(Int.self, forKey: .dailyNewVocabularyLimit) ?? 3)
         newVocabularyKeys = try container.decodeIfPresent([String].self, forKey: .newVocabularyKeys) ?? []
         vocabularyRecallMode = try container.decodeIfPresent(Bool.self, forKey: .vocabularyRecallMode) ?? true
         vocabularyRetention = min(0.95, max(0.8, try container.decodeIfPresent(Double.self, forKey: .vocabularyRetention) ?? 0.9))
@@ -276,18 +286,24 @@ final class AppDataStore: ObservableObject {
     let progressURL: URL
 
     let objectWillChange = ObservableObjectPublisher()
-    var settings: AppSettings
+    private(set) var libraryRevision = 0
+    var settings: AppSettings {
+        didSet { if oldValue.enabledDictionaryIDs != settings.enabledDictionaryIDs { libraryRevision &+= 1 } }
+    }
     var pets: [PetAsset]
-    var dictionaries: [DictionaryPack]
-    var vocabularyProgress: VocabularyProgress
-    var personalVocabulary: PersonalVocabulary
+    var dictionaries: [DictionaryPack] { didSet { libraryRevision &+= 1 } }
+    var vocabularyProgress: VocabularyProgress { didSet { libraryRevision &+= 1 } }
+    var personalVocabulary: PersonalVocabulary { didSet { libraryRevision &+= 1 } }
     let captureToken: String
+    let isUsingAlternateDataDirectory: Bool
     let progressState = ProgressStateStore()
     private var previewImageCache: [String: NSImage] = [:]
     private var spriteRendererCache: [String: PetAnimationRenderer] = [:]
 
     init(root: URL? = nil) throws {
         rootURL = try root ?? JSONFileStore.applicationSupportDirectory()
+        let normalRoot = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("CodexDesktopPet")
+        isUsingAlternateDataDirectory = rootURL.resolvingSymlinksInPath().standardizedFileURL != normalRoot.resolvingSymlinksInPath().standardizedFileURL
         petsURL = rootURL.appendingPathComponent("Pets", isDirectory: true)
         packagesURL = rootURL.appendingPathComponent("Packages", isDirectory: true)
         dictionariesURL = rootURL.appendingPathComponent("Dictionaries", isDirectory: true)
@@ -335,7 +351,9 @@ final class AppDataStore: ObservableObject {
     }
 
     func saveSettings() {
-        settings.movementSpeedMultiplier = min(max(settings.movementSpeedMultiplier, 0.1), 1.4)
+        settings.dailyNewVocabularyLimit = max(0, settings.dailyNewVocabularyLimit)
+        settings.vocabularyMinimumIntervalMinutes = max(1, settings.vocabularyMinimumIntervalMinutes)
+        settings.movementSpeedMultiplier = min(max(settings.movementSpeedMultiplier, 0.05), 1.4)
         settings.dailyVocabularyLimit = VocabularyDisplayScheduler.normalizedDailyLimit(settings.dailyVocabularyLimit)
         settings.vocabularyWindowHours = VocabularyDisplayScheduler.normalizedWindowHours(settings.vocabularyWindowHours)
         let studyWindow = VocabularyDisplayScheduler.normalizedStudyWindow(
@@ -427,19 +445,108 @@ final class AppDataStore: ObservableObject {
         try JSONFileStore.save(dictionaries[index], to: dictionaryFileURL(dictionaryID))
     }
 
-    func deleteDictionary(_ dictionaryID: String, deleteLearningProgress: Bool = false) throws {
-        guard !isBuiltInDictionary(dictionaryID) else {
-            throw NSError(domain: "CodexDesktopPet", code: 63, userInfo: [NSLocalizedDescriptionKey: "内置示例词典不能删除，只能关闭启用。"])
+    @discardableResult
+    func deleteDictionary(_ dictionaryID: String, deleteLearningProgress: Bool = false) throws -> URL? {
+        let isSample = isBuiltInDictionary(dictionaryID)
+        let fileURL = dictionaryFileURL(dictionaryID).standardizedFileURL
+        guard fileURL.deletingLastPathComponent() == dictionariesURL.standardizedFileURL,
+              dictionaries.contains(where: { $0.id == dictionaryID }) else {
+            throw NSError(domain: "CodexDesktopPet", code: 64, userInfo: [NSLocalizedDescriptionKey: "找不到可删除的本地词典。"])
+        }
+        let resourceOnly = isSample && !FileManager.default.fileExists(atPath: fileURL.path)
+        if !resourceOnly {
+            let values = try fileURL.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey])
+            guard values.isRegularFile == true, values.isSymbolicLink != true else {
+                throw NSError(domain: "CodexDesktopPet", code: 65, userInfo: [NSLocalizedDescriptionKey: "词典文件无效，未移到废纸篓。"])
+            }
+        }
+        var updatedSettings = settings
+        updatedSettings.enabledDictionaryIDs.remove(dictionaryID)
+        var updatedProgress = vocabularyProgress
+        var writes: [(url: URL, data: Data)] = [
+            (settingsURL, try JSONFileStore.encoder.encode(updatedSettings))
+        ]
+        if isSample {
+            var removed = try removedSampleDictionaryIDs()
+            removed.insert(dictionaryID)
+            writes.append((sampleRemovalsURL, try JSONFileStore.encoder.encode(removed.sorted())))
+        }
+        if deleteLearningProgress {
+            for url in [progressURL, syncFileURL].compactMap({ $0 }) {
+                guard let data = try readLocalFileIfPresent(at: url) else { continue }
+                let latest = try JSONFileStore.decoder.decode(VocabularyProgress.self, from: data)
+                updatedProgress.stats = LearningSync.merge(local: updatedProgress.stats, remote: latest.stats)
+            }
+            updatedProgress.stats = updatedProgress.stats.filter { !$0.key.hasPrefix("\(dictionaryID)::") }
+            let data = try JSONFileStore.encoder.encode(updatedProgress)
+            writes.append((progressURL, data))
+            if let syncURL = syncFileURL, syncURL.standardizedFileURL != progressURL.standardizedFileURL {
+                writes.append((syncURL, data))
+            }
+        }
+        var trashedURL: NSURL?
+        try commitLocalFiles(writes) {
+            // Trash is the last throwing operation; there is no permanent-delete fallback.
+            if !resourceOnly { try FileManager.default.trashItem(at: fileURL, resultingItemURL: &trashedURL) }
         }
         objectWillChange.send()
         dictionaries.removeAll { $0.id == dictionaryID }
-        settings.enabledDictionaryIDs.remove(dictionaryID)
-        try? FileManager.default.removeItem(at: dictionaryFileURL(dictionaryID))
-        if deleteLearningProgress {
-            vocabularyProgress.stats = vocabularyProgress.stats.filter { !$0.key.hasPrefix("\(dictionaryID)::") }
-            saveLearningProgress()
+        settings = updatedSettings
+        if deleteLearningProgress { vocabularyProgress = updatedProgress }
+        return trashedURL.map { $0 as URL }
+    }
+
+    private var sampleRemovalsURL: URL { rootURL.appendingPathComponent("removed-sample-dictionaries.json") }
+
+    private func removedSampleDictionaryIDs() throws -> Set<String> {
+        guard let data = try readLocalFileIfPresent(at: sampleRemovalsURL) else { return [] }
+        return Set(try JSONFileStore.decoder.decode([String].self, from: data))
+    }
+
+    func restoreSampleDictionaries() throws {
+        try commitLocalFiles([(sampleRemovalsURL, try JSONFileStore.encoder.encode([String]()))])
+        objectWillChange.send()
+        try loadUserDictionaries()
+    }
+
+    func readLocalFileIfPresent(at url: URL) throws -> Data? {
+        do { return try Data(contentsOf: url) }
+        catch let error as CocoaError where error.code == .fileReadNoSuchFile { return nil }
+    }
+
+    // These local commits stage memory separately and restore prior bytes on write/final-operation failure.
+    func commitLocalFiles(_ writes: [(url: URL, data: Data)], finalOperation: () throws -> Void = {}) throws {
+        let paths = writes.map { $0.url.standardizedFileURL.path }
+        guard Set(paths).count == paths.count else {
+            throw NSError(domain: "CodexDesktopPet", code: 67, userInfo: [NSLocalizedDescriptionKey: "本地文件路径冲突，未提交修改。"])
         }
-        saveSettings()
+        let originals = try writes.map { try readLocalFileIfPresent(at: $0.url) }
+        var committed = 0
+        do {
+            for write in writes {
+                try write.data.write(to: write.url, options: .atomic)
+                committed += 1
+            }
+            try finalOperation()
+        } catch {
+            var rollbackErrors: [String] = []
+            for index in (0..<committed).reversed() {
+                do {
+                    if let original = originals[index] {
+                        try original.write(to: writes[index].url, options: .atomic)
+                    } else {
+                        try FileManager.default.removeItem(at: writes[index].url)
+                    }
+                } catch { rollbackErrors.append(error.localizedDescription) }
+            }
+            if !rollbackErrors.isEmpty {
+                throw NSError(domain: "CodexDesktopPet", code: 66, userInfo: [
+                    NSLocalizedDescriptionKey: "\(error.localizedDescription)；恢复本地文件失败：\(rollbackErrors.joined(separator: "; "))",
+                    NSUnderlyingErrorKey: error
+                ])
+            }
+            throw error
+        }
     }
 
     func preparePDFDictionaryDraft(from url: URL) throws -> DictionaryImportDraft {
@@ -750,8 +857,20 @@ final class AppDataStore: ObservableObject {
 
     func setMovementSpeedMultiplier(_ value: Double) {
         objectWillChange.send()
-        settings.movementSpeedMultiplier = min(max(value, 0.1), 1.4)
+        settings.movementSpeedMultiplier = min(max(value, 0.05), 1.4)
         saveSettings()
+    }
+
+    func setWalkingPaused(_ value: Bool) {
+        guard settings.walkingPaused != value else { return }
+        objectWillChange.send()
+        settings.walkingPaused = value
+        saveSettings()
+    }
+
+    func petClickFeedbackPhrase(at index: Int) -> String {
+        // SwiftUI can query a removed text field's binding during view teardown.
+        settings.petClickFeedbackPhrases.indices.contains(index) ? settings.petClickFeedbackPhrases[index] : ""
     }
 
     func setPetClickFeedbackPhrase(index: Int, phrase: String) {
@@ -1008,12 +1127,13 @@ final class AppDataStore: ObservableObject {
 
     func canShowAutomaticVocabulary(now: Date = Date()) -> Bool {
         resetVocabularyScheduleIfNeeded(now: now)
-        return VocabularyDisplayScheduler.canShowAutomaticVocabulary(vocabularyScheduleSnapshot, now: now)
+        return VocabularyDisplayScheduler.canShowAutomaticVocabulary(vocabularyScheduleSnapshot, now: now, unlimited: settings.dailyVocabularyUnlimited)
     }
 
     func recordAutomaticVocabularyShown(now: Date = Date()) {
         objectWillChange.send()
-        vocabularyScheduleSnapshot = VocabularyDisplayScheduler.recordAutomaticVocabularyShown(vocabularyScheduleSnapshot, now: now)
+        settings.lastAutomaticVocabularyDate = now
+        vocabularyScheduleSnapshot = VocabularyDisplayScheduler.recordAutomaticVocabularyShown(vocabularyScheduleSnapshot, now: now, unlimited: settings.dailyVocabularyUnlimited)
         saveSettings()
     }
 
@@ -1028,7 +1148,8 @@ final class AppDataStore: ObservableObject {
         } else {
             phase = "进行中"
         }
-        return "学习时段 \(VocabularyDisplayScheduler.timeText(for: snapshot.studyStartMinute))-\(VocabularyDisplayScheduler.timeText(for: snapshot.studyEndMinute)) · \(phase) · 今日 \(snapshot.shownCount)/\(snapshot.dailyLimit)"
+        let total = settings.dailyVocabularyUnlimited ? "不限量" : String(snapshot.dailyLimit)
+        return "学习时段 \(VocabularyDisplayScheduler.timeText(for: snapshot.studyStartMinute))-\(VocabularyDisplayScheduler.timeText(for: snapshot.studyEndMinute)) · \(phase) · 今日 \(snapshot.shownCount)/\(total)"
     }
 
     func toggleDictionary(_ dictionaryID: String, isEnabled: Bool) {
@@ -1049,21 +1170,27 @@ final class AppDataStore: ObservableObject {
     }
 
     func dictionarySummaries() -> [DictionarySummary] {
-        dictionaries.map { pack in
+        Self.dictionarySummaries(packs: dictionaries, stats: vocabularyProgress.stats, enabledIDs: settings.enabledDictionaryIDs)
+    }
+
+    static func dictionarySummaries(packs: [DictionaryPack], stats: [String: WordStat], enabledIDs: Set<String>, isCancelled: () -> Bool = { false }) -> [DictionarySummary] {
+        packs.compactMap { pack in
+            guard !isCancelled() else { return nil }
             var learned = 0
             var unknown = 0
             var skipped = 0
             for entry in pack.entries {
+                guard !isCancelled() else { return nil }
                 let key = WordStat.key(dictionaryID: pack.id, term: entry.term)
-                guard let stat = vocabularyProgress.stats[key] else { continue }
+                guard let stat = stats[key] else { continue }
                 if stat.learned { learned += 1 }
                 if stat.unknownCount > 0 && !stat.learned { unknown += 1 }
                 if stat.skippedCount > 0 { skipped += 1 }
             }
             return DictionarySummary(
                 pack: pack,
-                isEnabled: settings.enabledDictionaryIDs.contains(pack.id),
-                isBuiltIn: isBuiltInDictionary(pack.id),
+                isEnabled: enabledIDs.contains(pack.id),
+                isBuiltIn: BuiltInDictionaries.packs.contains { $0.id == pack.id },
                 category: dictionaryCategory(for: pack),
                 learnedCount: learned,
                 unknownCount: unknown,
@@ -1080,15 +1207,16 @@ final class AppDataStore: ObservableObject {
         dictionariesURL.appendingPathComponent("\(dictionaryID).json")
     }
 
-    private func dictionaryCategory(from description: String?) -> String? {
+    private static func dictionaryCategory(from description: String?) -> String? {
         guard let description else { return nil }
         let prefix = "分类："
         guard description.hasPrefix(prefix) else { return nil }
         let rest = String(description.dropFirst(prefix.count))
-        return nilIfBlank(rest.components(separatedBy: "\n").first)
+        let value = rest.components(separatedBy: "\n").first?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return value?.isEmpty == false ? value : nil
     }
 
-    private func dictionaryCategory(for pack: DictionaryPack) -> String? {
+    private static func dictionaryCategory(for pack: DictionaryPack) -> String? {
         if let explicitCategory = dictionaryCategory(from: pack.description) {
             return explicitCategory
         }
@@ -1105,7 +1233,7 @@ final class AppDataStore: ObservableObject {
         return nil
     }
 
-    private func containsJapanese(_ value: String) -> Bool {
+    private static func containsJapanese(_ value: String) -> Bool {
         value.unicodeScalars.contains { scalar in
             let code = Int(scalar.value)
             return (0x3040...0x30ff).contains(code)
@@ -1125,14 +1253,16 @@ final class AppDataStore: ObservableObject {
     }
 
     private func loadUserDictionaries() throws {
-        dictionaries = BuiltInDictionaries.packs
+        let removed = try removedSampleDictionaryIDs()
+        dictionaries = BuiltInDictionaries.packs.filter { !removed.contains($0.id) }
         let files = (try? FileManager.default.contentsOfDirectory(
             at: dictionariesURL,
             includingPropertiesForKeys: nil
         )) ?? []
-        for file in files where file.pathExtension.lowercased() == "json" {
+        for file in files.sorted(by: { $0.lastPathComponent < $1.lastPathComponent }) where file.pathExtension.lowercased() == "json" {
             let pack = JSONFileStore.load(DictionaryPack.self, from: file, fallback: DictionaryPack(id: "", name: "", entries: []))
             if !pack.id.isEmpty, !pack.entries.isEmpty {
+                dictionaries.removeAll { $0.id == pack.id }
                 dictionaries.append(pack)
             }
         }
@@ -1144,7 +1274,12 @@ final class AppDataStore: ObservableObject {
             return
         }
 
-        var didChangeSettings = false
+        let receiptURL = rootURL.appendingPathComponent("bundled-dictionaries.json")
+        let receiptData = try readLocalFileIfPresent(at: receiptURL)
+        var installed = Set(try receiptData.map { try JSONFileStore.decoder.decode([String].self, from: $0) } ?? [])
+        let previousInstalled = installed
+        var updatedSettings = settings
+        var writes: [(url: URL, data: Data)] = []
         for file in files {
             let pack = JSONFileStore.load(
                 DictionaryPack.self,
@@ -1152,20 +1287,25 @@ final class AppDataStore: ObservableObject {
                 fallback: DictionaryPack(id: "", name: "", entries: [])
             )
             guard !pack.id.isEmpty, !pack.entries.isEmpty else { continue }
+            // A missing previously installed pack is an intentional deletion, not a new install.
+            guard !installed.contains(pack.id) else { continue }
 
             let destination = dictionariesURL.appendingPathComponent("\(pack.id).json")
-            if !FileManager.default.fileExists(atPath: destination.path) {
-                try FileManager.default.copyItem(at: file, to: destination)
-                if !settings.enabledDictionaryIDs.contains(pack.id) {
-                    settings.enabledDictionaryIDs.insert(pack.id)
-                    didChangeSettings = true
-                }
+            if try readLocalFileIfPresent(at: destination) == nil {
+                writes.append((destination, try Data(contentsOf: file)))
+                updatedSettings.enabledDictionaryIDs.insert(pack.id)
             }
+            // Existing files migrate into the receipt without overwriting content or enablement.
+            installed.insert(pack.id)
         }
-
-        if didChangeSettings {
-            saveSettings()
+        if updatedSettings.enabledDictionaryIDs != settings.enabledDictionaryIDs {
+            writes.append((settingsURL, try JSONFileStore.encoder.encode(updatedSettings)))
         }
+        if installed != previousInstalled || receiptData == nil {
+            writes.append((receiptURL, try JSONFileStore.encoder.encode(installed.sorted())))
+        }
+        try commitLocalFiles(writes)
+        settings = updatedSettings
     }
 
     private func bundledDictionaryFiles() -> [URL] {

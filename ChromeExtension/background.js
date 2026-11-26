@@ -7,7 +7,7 @@ function serialized(operation) {
   return next;
 }
 chrome.runtime.onInstalled.addListener(() => {
-  chrome.contextMenus.create({id: "capture-word", title: "加入 Whisky&Cling 生词本", contexts: ["selection"]});
+  chrome.contextMenus.create({id: "capture-word", title: "加入 PetPetKnows 生词本", contexts: ["selection"]});
   chrome.alarms.create("retry", {periodInMinutes: 2});
 });
 chrome.runtime.onStartup.addListener(() => chrome.alarms.create("retry", {periodInMinutes: 2}));

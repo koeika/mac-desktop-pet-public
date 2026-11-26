@@ -9,6 +9,7 @@ final class PetAnimationRenderer {
     private let sprite: CGImage
     private let rowCount = CodexPetAction.allCases.count
     private let visibleColumnsByRow: [[Int]]
+    private let frameCache = NSCache<NSString, NSImage>()
 
     init?(spriteURL: URL, framesPerAction: Int = 8) {
         guard let image = NSImage(contentsOf: spriteURL),
@@ -18,6 +19,8 @@ final class PetAnimationRenderer {
         self.spriteURL = spriteURL
         self.framesPerAction = max(1, framesPerAction)
         self.sprite = cgImage
+        frameCache.countLimit = 96
+        frameCache.totalCostLimit = 32 * 1024 * 1024
         self.visibleColumnsByRow = Self.visibleColumnsByRow(
             sprite: cgImage,
             rowCount: rowCount,
@@ -37,6 +40,8 @@ final class PetAnimationRenderer {
         } else {
             visibleColumns[abs(frameIndex) % visibleColumns.count]
         }
+        let cacheKey = "\(row):\(column)" as NSString
+        if let cached = frameCache.object(forKey: cacheKey) { return cached }
         let rect = CGRect(
             x: column * frameWidth,
             y: row * frameHeight,
@@ -44,11 +49,26 @@ final class PetAnimationRenderer {
             height: frameHeight
         )
         guard let cropped = sprite.cropping(to: rect) else { return nil }
-        return NSImage(cgImage: cropped, size: NSSize(width: frameWidth, height: frameHeight))
+        let image = NSImage(cgImage: cropped, size: NSSize(width: frameWidth, height: frameHeight))
+        frameCache.setObject(image, forKey: cacheKey, cost: cropped.width * cropped.height * 4)
+        return image
     }
 
     func stillFrame(for action: CodexPetAction = .idle) -> NSImage? {
         frame(for: action, frameIndex: 0)
+    }
+
+    func desktopFrame(for action: CodexPetAction, frameIndex: Int) -> NSImage? {
+        let row = min(action.rowIndex, rowCount - 1)
+        let count = max(1, visibleColumnsByRow[row].isEmpty ? visibleColumnsByRow[0].count : visibleColumnsByRow[row].count)
+        return frame(for: action, frameIndex: Self.desktopFrameIndex(action: action, sequenceIndex: frameIndex, frameCount: count))
+    }
+
+    static func desktopFrameIndex(action: CodexPetAction, sequenceIndex: Int, frameCount: Int) -> Int {
+        let count = max(1, frameCount)
+        let rest = action == .idle ? 24 : (action == .waiting || action == .review ? 12 : 0)
+        let phase = max(0, sequenceIndex) % (count + rest)
+        return phase < count ? phase : 0
     }
 
     private static func visibleColumnsByRow(sprite: CGImage, rowCount: Int, framesPerAction: Int) -> [[Int]] {

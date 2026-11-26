@@ -18,4 +18,4 @@ rm -rf "${target_dir}"
 cp -R "${source_skill_dir}" "${target_dir}"
 
 echo "已安装 Codex skill：${target_dir}"
-echo "重启 Codex 或开启新会话后，Codex 会在任务进度和完成时上报给 Whisky&Cling。"
+echo "重启 Codex 或开启新会话后，Codex 会在任务进度和完成时上报给 PetPetKnows。"

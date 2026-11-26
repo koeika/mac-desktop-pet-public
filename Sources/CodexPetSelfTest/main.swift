@@ -20,6 +20,7 @@ struct CodexPetSelfTest {
         try testDeepSeekDictionaryParserPayloadAndParsing()
         testVocabularyDisplaySchedule()
         testRandomWanderEngine()
+        try testLiveMovementSpeed()
         print("codex-pet-selftest: all checks passed")
     }
 
@@ -314,7 +315,7 @@ struct CodexPetSelfTest {
         var deltas: [CGPoint] = []
         var idleFrames = 0
 
-        for _ in 0..<170 {
+        for _ in 0..<1200 {
             let state = engine.tick(deltaTime: 0.08, bounds: bounds, petSize: size) {
                 if randomValues.isEmpty { return 0.9 }
                 return randomValues.removeFirst()
@@ -335,6 +336,55 @@ struct CodexPetSelfTest {
             abs($0.x - first.x) > 0.01 || abs($0.y - first.y) > 0.01
         }
         precondition(hasDifferentDelta)
+
+        var quiet = PetBehaviorEngine(origin: CGPoint(x: 100, y: 100))
+        var previousQuiet = quiet.origin
+        var resting = 0
+        var peakSpeed: CGFloat = 0
+        for _ in 0..<3000 {
+            let state = quiet.tick(deltaTime: 0.2, bounds: bounds, petSize: size, speedMultiplier: 0.1, random: { 0.99 })
+            let speed = hypot(state.origin.x - previousQuiet.x, state.origin.y - previousQuiet.y) / 0.2
+            peakSpeed = max(peakSpeed, speed)
+            if speed < 0.001 { resting += 1 }
+            previousQuiet = state.origin
+        }
+        precondition(peakSpeed > 0 && peakSpeed <= 4.51, "Slow movement must remain slow without a duration cap forcing acceleration")
+        precondition(resting > 2400, "Even a random stream forcing every walking choice must spend over 80% resting")
+    }
+
+    static func testLiveMovementSpeed() throws {
+        let bounds = CGRect(x: 0, y: 0, width: 2000, height: 1000)
+        let size = CGSize(width: 120, height: 120)
+        var moving = PetBehaviorEngine(origin: CGPoint(x: 300, y: 300))
+        _ = moving.tick(deltaTime: 30, bounds: bounds, petSize: size, speedMultiplier: 1, random: { 0.99 })
+        _ = moving.tick(deltaTime: 1.5, bounds: bounds, petSize: size, speedMultiplier: 1, random: { 0.99 })
+        let initial = moving.origin
+        func displacement(_ state: PetMotionState) -> CGFloat {
+            hypot(state.origin.x - initial.x, state.origin.y - initial.y)
+        }
+        var normal = moving
+        var slow = moving
+        var fast = moving
+        let baseline = displacement(normal.tick(deltaTime: 0.2, bounds: bounds, petSize: size, speedMultiplier: 1, random: { 0.99 }))
+        let slowed = displacement(slow.tick(deltaTime: 0.2, bounds: bounds, petSize: size, speedMultiplier: 0.1, random: { 0.99 }))
+        let accelerated = displacement(fast.tick(deltaTime: 0.2, bounds: bounds, petSize: size, speedMultiplier: 1.4, random: { 0.99 }))
+        try expect(baseline > 0, "Live speed fixture must already be moving")
+        try expect(slowed < baseline * 0.2, "Changing to 0.1x must slow the current walking leg immediately")
+        try expect(accelerated > baseline * 1.2, "Changing to 1.4x must accelerate the current walking leg immediately")
+        var unchanged = moving
+        let samePosition = unchanged.tick(deltaTime: 0, bounds: bounds, petSize: size, speedMultiplier: 0.05, random: { 0.99 })
+        try expect(samePosition.origin == initial, "Changing speed alone must not jump the pet")
+        for (requested, limit) in [(-1.0, 0.05), (5.0, 1.4)] {
+            var invalid = moving
+            var clamped = moving
+            let a = invalid.tick(deltaTime: 0.2, bounds: bounds, petSize: size, speedMultiplier: requested, random: { 0.99 })
+            let b = clamped.tick(deltaTime: 0.2, bounds: bounds, petSize: size, speedMultiplier: limit, random: { 0.99 })
+            try expect(a == b, "Live speed must honor the configured multiplier bounds")
+        }
+        var idle = PetBehaviorEngine(origin: initial)
+        let rest = idle.tick(deltaTime: 1, bounds: bounds, petSize: size, speedMultiplier: 1.4, random: { 0.99 })
+        try expect(rest.origin == initial && rest.action == .idle, "Changing speed must not cancel an idle pause")
+        print("live-speed-regression: current-leg slowdown, acceleration, position continuity, clamps and idle preservation passed")
     }
 
     static func testVocabularyDisplaySchedule() {
@@ -370,8 +420,17 @@ struct CodexPetSelfTest {
         )
         precondition(invalidWindow.studyStartMinute == 10 * 60)
         precondition(invalidWindow.studyEndMinute == 18 * 60)
-        precondition(VocabularyDisplayScheduler.normalizedDailyLimit(100) == 50)
+        precondition(VocabularyDisplayScheduler.normalizedDailyLimit(100) == 100)
         precondition(VocabularyDisplayScheduler.normalizedDailyLimit(0) == 1)
+        snapshot.shownCount = 900
+        precondition(VocabularyDisplayScheduler.canShowAutomaticVocabulary(snapshot, now: dayTwo, calendar: calendar, unlimited: true))
+        precondition(!VocabularyDisplayScheduler.canShowAutomaticVocabulary(snapshot, now: dayTwo, calendar: calendar))
+        let recorded = VocabularyDisplayScheduler.recordAutomaticVocabularyShown(snapshot, now: dayTwo, calendar: calendar, unlimited: true)
+        precondition(recorded.shownCount == 901)
+        precondition(!VocabularyDisplayScheduler.canShowAutomaticVocabulary(recorded, now: windowEnd, calendar: calendar, unlimited: true))
+        precondition(VocabularyDisplayScheduler.automaticInterval(snapshot, now: dayTwo, unlimited: true, minimumMinutes: 5, calendar: calendar) == 300)
+        precondition(VocabularyDisplayScheduler.automaticInterval(VocabularyDisplayScheduleSnapshot(dailyLimit: 100_000), now: dayTwo, unlimited: false, minimumMinutes: 5, jitter: 0.75, calendar: calendar) == 300)
+        precondition(VocabularyDisplayScheduler.resetIfNeeded(recorded, now: dayTwo.addingTimeInterval(86400), calendar: calendar).shownCount == 0)
     }
 
     static func expect(_ condition: @autoclosure () -> Bool, _ message: String) throws {

@@ -61,7 +61,7 @@
     selected = {term, language: /[ぁ-んァ-ン一-龯]/.test(term) ? "ja" : "en", meaning: "",
       example: sentence.trim() === term ? undefined : sentence.trim().slice(0, 500), sourceURL: location.origin + location.pathname, sourceTitle: document.title.slice(0, 200)};
     clear();
-    const dot = node("button", "dot"); dot.type = "button"; dot.title = "查询并收藏到 Whisky&Cling";
+    const dot = node("button", "dot"); dot.type = "button"; dot.title = "查询并收藏到 PetPetKnows";
     const plus = node("span", "plus"); plus.setAttribute("aria-hidden", "true"); dot.append(plus);
     dot.setAttribute("aria-label", "查询并收藏 " + term);
     dot.addEventListener("click", event => { if (event.isTrusted) open(selected); });
@@ -69,8 +69,8 @@
   }
   async function open(word) {
     const version = ++revision; selected = word; opened = true; clear();
-    const card = node("section", "card"); card.setAttribute("role", "dialog"); card.setAttribute("aria-label", "Whisky&Cling 生词卡");
-    const header = node("header", ""); header.append(node("span", "brand", "Whisky & Cling"));
+    const card = node("section", "card"); card.setAttribute("role", "dialog"); card.setAttribute("aria-label", "PetPetKnows 生词卡");
+    const header = node("header", ""); header.append(node("span", "brand", "PetPetKnows"));
     const close = node("button", "close", "×"); close.setAttribute("aria-label", "关闭生词卡"); close.onclick = event => { if (event.isTrusted) hide(); }; header.append(close);
     const term = node("h2", "term", word.term), phonetic = node("div", "phonetic"), meaning = node("p", "meaning");
     const example = node("p", "example"), hint = node("p", "hint"), status = node("p", "status", "正在查找释义…"); status.setAttribute("role", "status");

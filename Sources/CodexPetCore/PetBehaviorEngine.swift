@@ -14,7 +14,7 @@ public struct PetMotionState: Equatable {
 public struct PetBehaviorEngine {
     private enum Mode {
         case idle(remaining: TimeInterval)
-        case moving(start: CGPoint, target: CGPoint, duration: TimeInterval, elapsed: TimeInterval)
+        case moving(start: CGPoint, target: CGPoint, duration: TimeInterval, elapsed: TimeInterval, referenceMultiplier: Double)
         case performing(action: CodexPetAction, remaining: TimeInterval)
     }
 
@@ -23,12 +23,12 @@ public struct PetBehaviorEngine {
 
     public init(origin: CGPoint = .zero) {
         self.origin = origin
-        self.mode = .idle(remaining: 4.0)
+        self.mode = .idle(remaining: 30)
     }
 
     public mutating func snap(to origin: CGPoint) {
         self.origin = origin
-        self.mode = .idle(remaining: 2.8)
+        self.mode = .idle(remaining: 20)
     }
 
     public mutating func tick(
@@ -36,7 +36,7 @@ public struct PetBehaviorEngine {
         bounds: CGRect,
         petSize: CGSize,
         preferredAction: CodexPetAction? = nil,
-        speedMultiplier: Double = 0.20,
+        speedMultiplier: Double = 0.10,
         random: () -> Double = { Double.random(in: 0..<1) }
     ) -> PetMotionState {
         let clampedBounds = CGRect(
@@ -73,12 +73,14 @@ public struct PetBehaviorEngine {
                 mode = .performing(action: action, remaining: nextRemaining)
                 naturalAction = action
             } else {
-                mode = .idle(remaining: randomRange(4.0, 10.0, random))
+                mode = .idle(remaining: randomRange(25, 65, random))
                 naturalAction = .idle
             }
 
-        case .moving(let start, let target, let duration, let elapsed):
-            let nextElapsed = min(duration, elapsed + deltaTime)
+        case .moving(let start, let target, let duration, let elapsed, let referenceMultiplier):
+            // Scale future time, not completed progress, so live changes never teleport the pet.
+            let rate = normalizedSpeed(speedMultiplier) / referenceMultiplier
+            let nextElapsed = min(duration, elapsed + max(0, deltaTime) * rate)
             let progress = duration <= 0 ? 1 : nextElapsed / duration
             let eased = smoothStep(progress)
             origin = CGPoint(
@@ -88,10 +90,10 @@ public struct PetBehaviorEngine {
             origin = clamped(origin, in: clampedBounds)
 
             if nextElapsed >= duration {
-                mode = .idle(remaining: randomRange(3.8, 10.5, random))
+                mode = .idle(remaining: randomRange(30, 80, random))
                 naturalAction = .idle
             } else {
-                mode = .moving(start: start, target: target, duration: duration, elapsed: nextElapsed)
+                mode = .moving(start: start, target: target, duration: duration, elapsed: nextElapsed, referenceMultiplier: referenceMultiplier)
                 if abs(target.x - start.x) < 8 {
                     naturalAction = .running
                 } else {
@@ -105,39 +107,43 @@ public struct PetBehaviorEngine {
 
     private mutating func chooseNextMode(bounds: CGRect, speedMultiplier: Double, random: () -> Double) {
         let roll = random()
-        if roll < 0.58 {
-            mode = .idle(remaining: randomRange(4.0, 11.0, random))
+        if roll < 0.55 {
+            mode = .idle(remaining: randomRange(25, 65, random))
             return
         }
-        if roll < 0.65 {
-            mode = .performing(action: .waiting, remaining: randomRange(3.0, 6.5, random))
+        if roll < 0.72 {
+            mode = .performing(action: .waiting, remaining: randomRange(10, 20, random))
             return
         }
-        if roll < 0.69 {
-            mode = .performing(action: .waving, remaining: randomRange(1.6, 3.0, random))
+        if roll < 0.86 {
+            mode = .performing(action: .review, remaining: randomRange(8, 16, random))
             return
         }
-        if roll < 0.71 {
-            mode = .performing(action: .jumping, remaining: randomRange(1.0, 1.8, random))
+        if roll < 0.90 {
+            mode = .performing(action: .waving, remaining: randomRange(2, 3, random))
             return
         }
 
         let angle = random() * Double.pi * 2
-        let stepDistance = randomRange(36, 170, random)
+        let multiplier = normalizedSpeed(speedMultiplier)
+        let speed = randomRange(18, 30, random) * multiplier
+        let stepDistance = speed * randomRange(4, 8, random)
         let target = CGPoint(
             x: origin.x + CGFloat(cos(angle) * stepDistance),
             y: origin.y + CGFloat(sin(angle) * stepDistance)
         )
         let clampedTarget = clamped(target, in: bounds)
         let distance = hypot(clampedTarget.x - origin.x, clampedTarget.y - origin.y)
-        guard distance >= 12 else {
-            mode = .idle(remaining: randomRange(4.0, 11.0, random))
+        guard distance >= 2 else {
+            mode = .idle(remaining: randomRange(25, 65, random))
             return
         }
-        let speedScale = min(max(speedMultiplier, 0.1), 1.4)
-        let speed = randomRange(42, 88, random) * speedScale
-        let duration = max(1.6, min(45, TimeInterval(distance / CGFloat(speed))))
-        mode = .moving(start: origin, target: clampedTarget, duration: duration, elapsed: 0)
+        let duration = max(0.5, TimeInterval(distance / CGFloat(speed)))
+        mode = .moving(start: origin, target: clampedTarget, duration: duration, elapsed: 0, referenceMultiplier: multiplier)
+    }
+
+    private func normalizedSpeed(_ value: Double) -> Double {
+        value.isFinite ? min(max(value, 0.05), 1.4) : 0.10
     }
 
     private func clamped(_ point: CGPoint, in bounds: CGRect) -> CGPoint {

@@ -1,13 +1,13 @@
 ---
 name: codex-desktop-pet
-description: Report Codex work progress to the local Whisky&Cling macOS desktop pet app.
+description: Report Codex work progress to the local PetPetKnows macOS desktop pet app.
 ---
 
-Use this skill whenever the local Whisky&Cling/Codex Desktop Pet app should reflect Codex task progress.
+Use this skill whenever the local PetPetKnows/Codex Desktop Pet app should reflect Codex task progress.
 
 Use the local HTTP API for routine Codex progress reporting. It avoids SwiftPM manifest and build-cache access, which can fail inside Codex's sandbox. Do not invoke SwiftPM or any source-tree/release CLI for routine reporting unless the user explicitly asks to test the CLI.
 
-When running inside Codex Desktop, the normal command sandbox may fail to reach `127.0.0.1` even while Whisky&Cling is listening. If a reporting `curl` fails with connection refused, timeout, or no visible desktop feedback, immediately retry the same local HTTP call with escalated command permissions. Do not treat the app as stopped until an escalated `GET /v1/state` also fails.
+When running inside Codex Desktop, the normal command sandbox may fail to reach `127.0.0.1` even while PetPetKnows is listening. If a reporting `curl` fails with connection refused, timeout, or no visible desktop feedback, immediately retry the same local HTTP call with escalated command permissions. Do not treat the app as stopped until an escalated `GET /v1/state` also fails.
 
 The app listens on `http://127.0.0.1:4789` by default. If the user changed the port, use `PET_SERVER_URL`, for example:
 

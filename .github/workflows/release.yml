@@ -23,36 +23,36 @@ jobs:
           swift run codex-pet-selftest
           node --test ChromeExtension/tests/*.test.mjs
           swift build -c release
-          .build/release/whiskycolin --self-test-notebook
-          .build/release/whiskycolin --self-test-enrichment
+          .build/release/PetPetKnows --self-test-notebook
+          .build/release/PetPetKnows --self-test-enrichment
 
-      - name: Package Whisky&Cling
+      - name: Package PetPetKnows
         run: |
           set -euo pipefail
 
           version="${GITHUB_REF_NAME}"
           test "$(uname -m)" = arm64
           app_version="${version#v}"
-          dist_name="whiskycolin-${version}-macos-arm64"
+          dist_name="PetPetKnows-${version}-macos-arm64"
           dist_dir="dist/${dist_name}"
-          app_dir="${dist_dir}/Whisky&Cling.app"
+          app_dir="${dist_dir}/PetPetKnows.app"
 
           rm -rf "${dist_dir}"
           mkdir -p "${app_dir}/Contents/MacOS"
           mkdir -p "${app_dir}/Contents/Resources"
           mkdir -p "${dist_dir}/bin"
 
-          cp .build/release/whiskycolin "${app_dir}/Contents/MacOS/whiskycolin"
+          cp .build/release/PetPetKnows "${app_dir}/Contents/MacOS/PetPetKnows"
           cp .build/release/petctl "${dist_dir}/bin/petctl"
           cp -R .build/release/CodexDesktopPet_CodexPetApp.bundle "${app_dir}/Contents/Resources/CodexDesktopPet_CodexPetApp.bundle"
           cp Sources/CodexPetApp/Resources/AppIcon.icns "${app_dir}/Contents/Resources/AppIcon.icns"
           cp -R ChromeExtension "${app_dir}/Contents/Resources/ChromeExtension"
           cp THIRD_PARTY_NOTICES.md "${app_dir}/Contents/Resources/THIRD_PARTY_NOTICES.md"
-          chmod +x "${app_dir}/Contents/MacOS/whiskycolin"
+          chmod +x "${app_dir}/Contents/MacOS/PetPetKnows"
           chmod +x "${dist_dir}/bin/petctl"
 
           # Remove linker debug paths before signing either distributed executable.
-          strip -S "${app_dir}/Contents/MacOS/whiskycolin" "${dist_dir}/bin/petctl"
+          strip -S "${app_dir}/Contents/MacOS/PetPetKnows" "${dist_dir}/bin/petctl"
           codesign --force --sign - "${dist_dir}/bin/petctl"
           codesign --verify --strict "${dist_dir}/bin/petctl"
 
@@ -62,13 +62,13 @@ jobs:
           <plist version="1.0">
           <dict>
             <key>CFBundleExecutable</key>
-            <string>whiskycolin</string>
+            <string>PetPetKnows</string>
             <key>CFBundleIdentifier</key>
             <string>app.whiskycolin.desktop-pet</string>
             <key>CFBundleName</key>
-            <string>Whisky&amp;Cling</string>
+            <string>PetPetKnows</string>
             <key>CFBundleDisplayName</key>
-            <string>Whisky&amp;Cling</string>
+            <string>PetPetKnows</string>
             <key>CFBundleIconFile</key>
             <string>AppIcon</string>
             <key>CFBundlePackageType</key>
@@ -99,15 +99,17 @@ jobs:
           chmod +x "${dist_dir}/Scripts/install-codex-skill.sh"
 
           cat > "${dist_dir}/INSTALL.md" <<'INSTALL'
-          # Whisky&Cling 安装说明
+          # PetPetKnows 安装说明
 
           ## 运行桌宠
 
           1. 解压 zip。
-          2. 打开 `Whisky&Cling.app`。
-          3. 如果 macOS 提示来自未认证开发者，请右键 `Whisky&Cling.app`，选择 `打开`。
+          2. 打开 `PetPetKnows.app`。
+          3. 如果 macOS 提示来自未认证开发者，只在确认来源可信后，按“系统设置 -> 隐私与安全性”的提示操作。
 
           当前 release 使用 ad-hoc 签名，未做 Developer ID 公证。
+          若提示文件损坏或有害，请停止打开、重新下载并核对 SHA256SUMS，不要关闭系统安全保护。
+          运行后可右键宠物，选择“配置中心”或“单词”；可随时暂停走动。
 
           App 内置 Whisky / Cling 共 6 套九动作宠物，以及 3,674 个雅思高频词。
           不包含发布者的设置、API Key、配对码或学习记录。
@@ -116,7 +118,7 @@ jobs:
 
           1. Chrome 打开 chrome://extensions，开启开发者模式。
           2. 选择“加载已解压的扩展程序”，选择随包的 ChromeExtension 文件夹。
-          3. 桌宠配置中心 -> 词典学习 -> 我的生词本 -> 复制 Chrome 配对码。
+          3. 桌宠配置中心 -> 连接与 AI -> 复制 Chrome 配对码。
           4. 在扩展的“桌宠配对”中粘贴配对码并保存。
           5. 网页选中单词，点旁边的珊瑚色加号，在页内词卡点击“收藏到桌宠”，不会新开标签页。
 
@@ -132,7 +134,7 @@ jobs:
           ./bin/petctl done --source codex --stage "完成" --message "任务完成" --progress 100
           ```
 
-          `petctl` 需要在 `Whisky&Cling.app` 运行时使用。
+          `petctl` 需要在 `PetPetKnows.app` 运行时使用。
 
           ## 安装 Codex 自动上报 skill
 
@@ -146,9 +148,9 @@ jobs:
           INSTALL
 
           ditto -c -k --sequesterRsrc --keepParent "${dist_dir}" "dist/${dist_name}.zip"
-          ditto -c -k --keepParent ChromeExtension "dist/WhiskyCling-ChromeExtension-${version}.zip"
+          ditto -c -k --keepParent ChromeExtension "dist/PetPetKnows-ChromeExtension-${version}.zip"
           python3 Scripts/verify-release.py "dist/${dist_name}.zip" --version "${version}" > dist/asset-manifest.json
-          (cd dist && shasum -a 256 "${dist_name}.zip" "WhiskyCling-ChromeExtension-${version}.zip" asset-manifest.json > SHA256SUMS)
+          (cd dist && shasum -a 256 "${dist_name}.zip" "PetPetKnows-ChromeExtension-${version}.zip" asset-manifest.json > SHA256SUMS)
 
       - name: Create GitHub Release
         env:
@@ -156,7 +158,7 @@ jobs:
         run: |
           set -euo pipefail
           version="${GITHUB_REF_NAME}"
-          asset="dist/whiskycolin-${version}-macos-arm64.zip"
-          gh release create "${version}" "${asset}" "dist/WhiskyCling-ChromeExtension-${version}.zip" dist/asset-manifest.json dist/SHA256SUMS \
-            --title "Whisky&Cling ${version}" \
+          asset="dist/PetPetKnows-${version}-macos-arm64.zip"
+          gh release create "${version}" "${asset}" "dist/PetPetKnows-ChromeExtension-${version}.zip" dist/asset-manifest.json dist/SHA256SUMS \
+            --title "PetPetKnows ${version}" \
             --notes-file docs/release-notes.md

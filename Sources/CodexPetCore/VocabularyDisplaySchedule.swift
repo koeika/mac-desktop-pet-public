@@ -69,20 +69,23 @@ public enum VocabularyDisplayScheduler {
     public static func canShowAutomaticVocabulary(
         _ snapshot: VocabularyDisplayScheduleSnapshot,
         now: Date,
-        calendar: Calendar = .current
+        calendar: Calendar = .current,
+        unlimited: Bool = false
     ) -> Bool {
         let updated = resetIfNeeded(snapshot, now: now, calendar: calendar)
-        guard updated.shownCount < updated.dailyLimit else { return false }
+        guard unlimited || updated.shownCount < updated.dailyLimit else { return false }
         return isInsideStudyWindow(updated, now: now, calendar: calendar)
     }
 
     public static func recordAutomaticVocabularyShown(
         _ snapshot: VocabularyDisplayScheduleSnapshot,
         now: Date,
-        calendar: Calendar = .current
+        calendar: Calendar = .current,
+        unlimited: Bool = false
     ) -> VocabularyDisplayScheduleSnapshot {
         var updated = resetIfNeeded(snapshot, now: now, calendar: calendar)
-        updated.shownCount = min(updated.dailyLimit, updated.shownCount + 1)
+        let next = updated.shownCount < Int.max ? updated.shownCount + 1 : Int.max
+        updated.shownCount = unlimited ? next : min(updated.dailyLimit, next)
         return updated
     }
 
@@ -127,7 +130,17 @@ public enum VocabularyDisplayScheduler {
     }
 
     public static func normalizedDailyLimit(_ value: Int) -> Int {
-        min(max(value, 1), 50)
+        max(value, 1)
+    }
+
+    public static func automaticInterval(_ snapshot: VocabularyDisplayScheduleSnapshot, now: Date,
+                                         unlimited: Bool, minimumMinutes: Int, jitter: Double = 1,
+                                         calendar: Calendar = .current) -> TimeInterval {
+        let minimum = Double(max(1, minimumMinutes)) * 60
+        guard !unlimited else { return minimum }
+        let remaining = max(0, snapshot.dailyLimit - snapshot.shownCount)
+        let evenlySpaced = secondsUntilStudyWindowEnd(snapshot, now: now, calendar: calendar) / (Double(remaining) + 1)
+        return max(minimum, evenlySpaced * min(1.25, max(0.75, jitter)))
     }
 
     public static func normalizedWindowHours(_ value: Int) -> Int {

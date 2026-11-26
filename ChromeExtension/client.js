@@ -25,7 +25,7 @@ export async function sendWord(word, config, fetcher = fetch) {
 
 export async function lookupWord(word, config, fetcher = fetch) {
   const base = localEndpoint(config.endpoint);
-  if (!config.token?.trim()) throw new Error("先点工具栏里的 Whisky&Cling，完成一次桌宠配对。");
+  if (!config.token?.trim()) throw new Error("先点工具栏里的 PetPetKnows，完成一次桌宠配对。");
   let response;
   try {
     response = await fetcher(base + "/v1/vocabulary/lookup", {

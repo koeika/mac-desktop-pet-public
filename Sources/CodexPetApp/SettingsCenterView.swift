@@ -40,21 +40,30 @@ struct SettingsCenterView: View {
     @ObservedObject var store: AppDataStore
     let actions: SettingsActions
     @State private var selection: SettingsTab = .pets
+    @State private var learningPage = "我的生词"
     @FocusState private var focusedTab: SettingsTab?
-    @State private var themeError: String?
     private var theme: AppVisualTheme { store.settings.visualTheme }
 
-    init(store: AppDataStore, actions: SettingsActions, initialTab: SettingsTab = .pets) {
+    init(store: AppDataStore, actions: SettingsActions, initialTab: SettingsTab = .pets, initialLearningPage: String = "我的生词") {
         self.store = store
         self.actions = actions
-        _selection = State(initialValue: initialTab)
+        _selection = State(initialValue: initialTab == .dictionary ? SettingsTab.learningTab(initialLearningPage) : initialTab)
+        _learningPage = State(initialValue: initialTab == .dictionary ? initialLearningPage : initialTab.isLearning ? initialTab.title : "我的生词")
     }
 
     var body: some View {
         HStack(spacing: 0) {
             sidebar
             Divider()
-            content
+            VStack(spacing: 0) {
+                HStack {
+                    Text(selection.title).font(.system(size: 18, weight: .semibold))
+                    Spacer()
+                }
+                .padding(.horizontal, 22).frame(height: 56)
+                Divider()
+                content
+            }
         }
         .frame(minWidth: 880, minHeight: 620)
         .background(theme.paper)
@@ -62,104 +71,94 @@ struct SettingsCenterView: View {
         .tint(theme.accent)
         .environment(\.companionTheme, theme)
         .preferredColorScheme(.light)
-        .alert("主题未保存", isPresented: Binding(get: { themeError != nil }, set: { if !$0 { themeError = nil } })) {
-            Button("知道了", role: .cancel) { themeError = nil }
-        } message: { Text(themeError ?? "") }
     }
 
     private var sidebar: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            VStack(alignment: .leading, spacing: 5) {
+        VStack(alignment: .leading, spacing: 22) {
+            HStack(spacing: 8) {
                 Image(systemName: "pawprint")
-                    .font(.system(size: 28, weight: .medium))
-                    .padding(.bottom, 12)
-                Text("Whisky\n& Cling")
-                    .font(.system(size: 27, weight: .heavy, design: .rounded))
-                    .lineSpacing(0)
-                Text("桌面上的小伙伴")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .font(.system(size: 20, weight: .regular))
+                Text(AppBrand.displayName)
+                    .font(.system(size: 16, weight: .semibold))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
             }
-            .padding(.top, 22)
+            .padding(.top, 24).padding(.bottom, 8)
 
             VStack(spacing: 8) {
                 tabButton(.pets)
                 tabButton(.dictionary)
+                tabButton(.library)
+                tabButton(.plan)
+                Divider().padding(.vertical, 8)
+                tabButton(.connections)
                 tabButton(.progress)
+                tabButton(.appearance)
             }
 
-            Spacer()
-
-            VStack(alignment: .leading, spacing: 8) {
-                Label("主题样式", systemImage: "paintpalette")
-                    .font(.caption.weight(.semibold))
-                Picker("主题样式", selection: Binding(
-                    get: { store.settings.visualTheme },
-                    set: { value in
-                        do { try store.selectVisualTheme(value) }
-                        catch { themeError = error.localizedDescription }
-                    }
-                )) {
-                    ForEach(AppVisualTheme.allCases) { value in
-                        Text(value.title).tag(value)
-                    }
+            GeometryReader { geometry in
+                if theme == .forest, geometry.size.height >= 86, let image = ForestThemeArtwork.ferns {
+                    Image(nsImage: image).resizable().scaledToFit()
+                        .frame(width: 108, height: 72)
+                        .frame(maxHeight: .infinity, alignment: .bottom)
+                        .padding(.bottom, 8).accessibilityHidden(true)
                 }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                .accessibilityLabel("主题样式")
             }
-            .padding(.bottom, 8)
 
             VStack(alignment: .leading, spacing: 8) {
-                Text("本地服务")
+                Text(store.isUsingAlternateDataDirectory ? "演示数据" : "本机数据")
                     .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(store.isUsingAlternateDataDirectory ? theme.accent : theme.ink)
                 Text("127.0.0.1:\(String(store.settings.serverPort))")
-                    .font(.system(.body, design: .monospaced))
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 7)
-                    .background(.quaternary, in: RoundedRectangle(cornerRadius: 8))
+                    .font(.system(size: 11, design: .monospaced)).foregroundStyle(.secondary)
+                if theme == .forest {
+                    Label(theme.title, systemImage: "leaf").font(.caption).foregroundStyle(theme.accent)
+                }
             }
+            .padding(.bottom, 20)
         }
-        .padding(.horizontal, 18)
+        .padding(.horizontal, 12)
         .frame(width: 190)
         .background(theme.wash)
     }
 
     private var content: some View {
-        Group {
-            switch selection {
-            case .pets:
-                PetGalleryTab(store: store, actions: actions)
-            case .dictionary:
-                DictionaryTab(store: store, actions: actions)
-            case .progress:
-                ProgressConnectTab(store: store, actions: actions)
+        ZStack {
+            // Keep import drafts and query/page state alive while changing sidebar sections.
+            DictionaryTab(store: store, actions: actions, initialPage: learningPage, isActive: selection.isLearning)
+                .opacity(selection.isLearning ? 1 : 0)
+                .disabled(!selection.isLearning)
+                .allowsHitTesting(selection.isLearning)
+                .accessibilityHidden(!selection.isLearning)
+            if !selection.isLearning {
+                Group {
+                    switch selection {
+                    case .pets: PetGalleryTab(store: store, actions: actions)
+                    case .progress: ProgressConnectTab(store: store, actions: actions)
+                    case .appearance: ThemeGalleryView(store: store)
+                    default: EmptyView()
+                    }
+                }.frame(maxWidth: .infinity, maxHeight: .infinity).background(theme.paper)
             }
         }
-        .padding(24)
+        .padding(18)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private func tabButton(_ tab: SettingsTab) -> some View {
         Button {
             selection = tab
+            if tab.isLearning { learningPage = tab.title }
         } label: {
             HStack(spacing: 10) {
                 Image(systemName: tab.icon)
                     .frame(width: 20)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(tab.title)
-                        .font(.system(size: 14, weight: .semibold))
-                    Text(tab.subtitle)
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                }
+                Text(tab.title).font(.system(size: 13, weight: selection == tab ? .semibold : .regular))
                 Spacer()
             }
-            .padding(12)
-            .foregroundStyle(selection == tab ? Color.white : theme.ink)
-            .background(selection == tab ? theme.accent : Color.clear, in: RoundedRectangle(cornerRadius: 7))
+            .padding(.horizontal, 10).frame(height: 36)
+            .foregroundStyle(selection == tab ? theme.accent : theme.ink)
+            .background(selection == tab ? theme.accent.opacity(0.08) : Color.clear, in: RoundedRectangle(cornerRadius: 7))
         }
         .buttonStyle(.plain)
         .focused($focusedTab, equals: tab)
@@ -167,24 +166,47 @@ struct SettingsCenterView: View {
     }
 }
 
-enum SettingsTab: CaseIterable {
+enum SettingsTab: CaseIterable, Hashable {
     case pets
     case dictionary
+    case library
+    case plan
+    case connections
     case progress
+    case appearance
+
+    var isLearning: Bool { [.dictionary, .library, .plan, .connections].contains(self) }
+
+    static func learningTab(_ page: String) -> SettingsTab {
+        switch page {
+        case "词典库": return .library
+        case "学习计划": return .plan
+        case "连接与 AI": return .connections
+        default: return .dictionary
+        }
+    }
 
     var title: String {
         switch self {
         case .pets: return "宠物管理"
-        case .dictionary: return "词典学习"
+        case .dictionary: return "我的生词"
+        case .library: return "词典库"
+        case .plan: return "学习计划"
+        case .connections: return "连接与 AI"
         case .progress: return "AI 进度接入"
+        case .appearance: return "外观与主题"
         }
     }
 
     var subtitle: String {
         switch self {
         case .pets: return "上传、启用、权重"
-        case .dictionary: return "导入和复习统计"
+        case .dictionary: return "生词、词典、学习计划"
+        case .library: return "导入、分类、管理"
+        case .plan: return "学习时段与复习"
+        case .connections: return "浏览器配对、AI"
         case .progress: return "命令、HTTP、事件"
+        case .appearance: return "主题预览与切换"
         }
     }
 
@@ -192,7 +214,11 @@ enum SettingsTab: CaseIterable {
         switch self {
         case .pets: return "pawprint.fill"
         case .dictionary: return "character.book.closed.fill"
+        case .library: return "square.stack.3d.up"
+        case .plan: return "calendar"
+        case .connections: return "link"
         case .progress: return "bolt.horizontal.circle.fill"
+        case .appearance: return "paintpalette"
         }
     }
 }
@@ -206,49 +232,38 @@ struct PetGalleryTab: View {
     @State private var installPreview: PetInstallPreview?
     @State private var installError: String?
     @State private var installSuccess: String?
+    @State private var selectedPetID: String?
+    @State private var previewAction: CodexPetAction = .idle
+    @State private var linkInstall = false
+
+    private var selectedPet: PetAsset? {
+        store.pets.first { $0.id == selectedPetID } ?? store.enabledPets().first ?? store.pets.first
+    }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
-                sectionHeader("宠物管理", subtitle: "今天，也一起待在桌面吧。")
-
-                heroPreview
-
-                HStack(spacing: 10) {
-                    PrimaryActionButton(title: "上传素材", systemImage: "photo.badge.plus", action: actions.uploadPhotos)
-                    SecondaryActionButton(title: "导入宠物包", systemImage: "folder.badge.plus", action: actions.importPetPackage)
-                    SecondaryActionButton(title: "随机见一面", systemImage: "shuffle", action: actions.randomPreview)
+        GeometryReader { geometry in
+            if geometry.size.width >= 760 {
+                HStack(alignment: .top, spacing: 20) {
+                    gallery.frame(maxWidth: .infinity)
+                    Divider()
+                    inspector.frame(width: 250)
                 }
-
-                Divider().padding(.vertical, 6)
-                HStack(alignment: .top, spacing: 24) {
-                    speedPanel.frame(maxWidth: .infinity)
-                    urlInstallPanel.frame(maxWidth: .infinity)
-                }
-
-                clickFeedbackPanel
-
-                HStack {
-                    Text("我的小伙伴").font(.system(size: 19, weight: .bold, design: .rounded))
-                    Spacer()
-                    Text("\(store.enabledPets().count) 只已启用 · \(store.pets.count) 只收藏")
-                        .font(.caption).foregroundStyle(.secondary)
-                }
-
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 210), spacing: 14)], spacing: 14) {
-                    ForEach(store.pets) { pet in
-                        PetCard(store: store, pet: pet)
-                    }
-                    if store.pets.isEmpty {
-                        EmptyGalleryCard()
-                    }
-                }
-                .padding(.bottom, 12)
+            } else {
+                ScrollView {
+                    VStack(spacing: 20) {
+                        galleryContent
+                        Divider()
+                        inspectorContent
+                    }.padding(.trailing, 4)
+                }.scrollIndicators(.visible)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.trailing, 4)
         }
-        .scrollIndicators(.visible)
+        .popover(isPresented: $linkInstall) {
+            VStack(alignment: .leading, spacing: 16) {
+                HStack { Text("链接安装").font(.headline); Spacer(); Button("完成") { linkInstall = false } }
+                urlInstallPanel
+            }.padding(24).frame(width: 480)
+        }
         .sheet(item: $installPreview) { preview in
             InstallPreviewSheet(
                 store: store,
@@ -262,6 +277,119 @@ struct PetGalleryTab: View {
                 }
             )
         }
+    }
+
+    private var gallery: some View {
+        ScrollView { galleryContent.padding(.trailing, 4) }.scrollIndicators(.visible)
+    }
+
+    private var galleryContent: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            HStack {
+                Menu {
+                    Button("上传图片 / GIF / 视频", action: actions.uploadPhotos)
+                    Button("导入宠物包", action: actions.importPetPackage)
+                    Button("链接安装") { linkInstall = true }
+                } label: { Label("添加素材", systemImage: "plus") }
+                Spacer()
+                Button(action: actions.randomPreview) { Image(systemName: "shuffle") }.help("随机见一面")
+            }
+            if let pet = selectedPet {
+                VStack(spacing: 8) {
+                    if theme == .forest {
+                        ForestPetStage { petPreview(pet, animated: true) }.frame(height: 270)
+                    } else {
+                        petPreview(pet, animated: true).frame(height: 190)
+                    }
+                    Text(pet.name).font(.system(size: 18, weight: .semibold)).lineLimit(2)
+                    Label(pet.isEnabled ? "已加入桌面随机出现" : "未启用", systemImage: pet.isEnabled ? "checkmark.circle.fill" : "circle")
+                        .font(.caption).foregroundStyle(.secondary)
+                }.frame(maxWidth: .infinity).padding(.vertical, 12)
+            }
+            Divider()
+            HStack {
+                Text("我的小伙伴").font(.headline)
+                Text("\(store.pets.count) 只").font(.caption).foregroundStyle(.secondary)
+                Spacer()
+                Menu("批量样式") {
+                    ForEach(CompanionStyle.allCases, id: \.rawValue) { style in
+                        Button(style.title) { selectStyle(style) }
+                    }
+                }.fixedSize()
+            }
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 155), spacing: 10)], spacing: 10) {
+                ForEach(store.pets) { pet in
+                    Button { selectedPetID = pet.id; previewAction = .idle } label: {
+                        HStack(spacing: 10) {
+                            petPreview(pet, animated: false).frame(width: 56, height: 68)
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(pet.name).font(.system(size: 13, weight: .semibold)).lineLimit(2)
+                                Text(pet.mediaLabel).font(.caption2).foregroundStyle(.secondary).lineLimit(2)
+                            }.frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        .padding(10).frame(height: 92)
+                        .background(selectedPet?.id == pet.id ? theme.accent.opacity(0.05) : theme.paper)
+                        .clipShape(RoundedRectangle(cornerRadius: 7))
+                        .overlay(RoundedRectangle(cornerRadius: 7).stroke(selectedPet?.id == pet.id ? theme.accent.opacity(0.6) : theme.line.opacity(0.5), lineWidth: 1))
+                    }.buttonStyle(.plain).focusEffectDisabled()
+                        .accessibilityLabel("选择宠物 \(pet.name)")
+                        .accessibilityValue(selectedPet?.id == pet.id ? "已选择" : "未选择")
+                }
+            }
+            if store.pets.isEmpty { EmptyGalleryCard() }
+            if let installError { Text(installError).font(.caption).foregroundStyle(.red) }
+            if let installSuccess { Text(installSuccess).font(.caption).foregroundStyle(.secondary) }
+        }.frame(maxWidth: .infinity, alignment: .leading).padding(.bottom, 8)
+    }
+
+    @ViewBuilder private func petPreview(_ pet: PetAsset, animated: Bool) -> some View {
+        if animated, let renderer = store.spriteRenderer(for: pet) {
+            CompanionAnimation(renderer: renderer, action: previewAction).id(pet.id)
+        } else if let image = store.previewImage(for: pet) {
+            Image(nsImage: image).resizable().scaledToFit()
+        } else {
+            Image(systemName: pet.kind == .video ? "film" : "photo").font(.title).foregroundStyle(.secondary)
+        }
+    }
+
+    private var inspector: some View {
+        ScrollView { inspectorContent.padding(.trailing, 4) }.scrollIndicators(.visible)
+    }
+
+    private var inspectorContent: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            if let pet = selectedPet {
+                HStack {
+                    Text(pet.name).font(.system(size: 16, weight: .semibold)).lineLimit(2)
+                    Spacer()
+                    Menu {
+                        Button("删除宠物", role: .destructive) { store.deletePet(pet) }
+                    } label: { Image(systemName: "ellipsis") }.menuStyle(.borderlessButton).fixedSize().help("宠物操作")
+                }
+                Toggle("桌面显示", isOn: Binding(get: { selectedPet?.isEnabled ?? false }, set: {
+                    selectedPetID = pet.id
+                    store.setPetEnabled(pet, isEnabled: $0)
+                })).toggleStyle(.switch)
+                Divider()
+                if pet.kind == .codexPackage {
+                    Picker("动画预览", selection: $previewAction) {
+                        ForEach(CodexPetAction.allCases) { item in Text(item.chineseName).tag(item) }
+                    }
+                }
+                if pet.kind == .photo { Text("静态照片拟真有限").font(.caption).foregroundStyle(.secondary) }
+                speedPanel
+                Divider()
+                clickFeedbackPanel
+                Divider()
+                HStack {
+                    Text("出现权重")
+                    Spacer()
+                    Text(String(format: "%.1f", pet.weight)).font(.caption.monospacedDigit()).foregroundStyle(.secondary)
+                }
+                Slider(value: Binding(get: { selectedPet?.weight ?? 1 }, set: { store.setPetWeight(pet, weight: $0) }), in: 0.1...5)
+                Text("出现 \(pet.appearances) 次").font(.caption).foregroundStyle(.secondary)
+            }
+        }.frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var urlInstallPanel: some View {
@@ -329,7 +457,7 @@ struct PetGalleryTab: View {
                         TextField(
                             "反馈词 \(index + 1)",
                             text: Binding(
-                                get: { store.settings.petClickFeedbackPhrases[index] },
+                                get: { store.petClickFeedbackPhrase(at: index) },
                                 set: { store.setPetClickFeedbackPhrase(index: index, phrase: $0) }
                             )
                         )
@@ -373,11 +501,11 @@ struct PetGalleryTab: View {
                     get: { store.settings.movementSpeedMultiplier },
                     set: { store.setMovementSpeedMultiplier($0) }
                 ),
-                in: 0.1...1.4
+                in: 0.05...1.4
             )
-            Text("默认 0.20x；可以降到 0.10x。桌宠会经常停住做动作，不会一直走。")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+            Toggle("暂停走动", isOn: Binding(get: { store.settings.walkingPaused }, set: {
+                store.setWalkingPaused($0)
+            })).toggleStyle(.switch)
         }
         .padding(.vertical, 12)
     }
@@ -392,6 +520,7 @@ struct PetGalleryTab: View {
             do {
                 let preview = try await store.prepareRemotePetInstall(from: input)
                 await MainActor.run {
+                    linkInstall = false
                     installPreview = preview
                     isPreparingInstall = false
                 }
@@ -421,16 +550,22 @@ struct PetGalleryTab: View {
         HStack(spacing: 24) {
             CompanionDuo(store: store).frame(maxWidth: .infinity)
             VStack(alignment: .leading, spacing: 16) {
-                Text(theme == .storybook ? "绘本里的小伙伴" : "漫画里的小伙伴").font(.system(size: 22, weight: .heavy, design: .rounded))
+                Text(theme == .storybook ? "绘本里的小伙伴" : "漫画里的小伙伴").font(.system(size: 20, weight: .semibold))
                 Text("Whisky & Cling")
                     .font(.system(size: 13, weight: .medium, design: .monospaced))
                     .foregroundStyle(.secondary)
-                Button("彩色漫画") { selectStyle(.color) }
-                    .buttonStyle(InkButtonStyle(primary: true))
-                Button("黑白手绘") { selectStyle(.ink) }
-                    .buttonStyle(InkButtonStyle())
-                Button("写实原版") { selectStyle(.original) }
-                    .buttonStyle(InkButtonStyle())
+                ForEach([CompanionStyle.color, .ink, .original], id: \.rawValue) { style in
+                    let selected = store.selectedCompanionStyle == style
+                    Button { selectStyle(style) } label: {
+                        HStack {
+                            Text(style.title)
+                            Spacer()
+                            Image(systemName: "checkmark").opacity(selected ? 1 : 0)
+                        }
+                    }
+                    .buttonStyle(InkButtonStyle(primary: selected))
+                    .accessibilityValue(selected ? "已选择" : "未选择")
+                }
             }.frame(width: 205, alignment: .leading)
         }
         .padding(.vertical, 18)
@@ -439,6 +574,7 @@ struct PetGalleryTab: View {
     private func selectStyle(_ style: CompanionStyle) {
         do {
             try store.selectCompanionStyle(style)
+            selectedPetID = store.enabledPets().first?.id
             actions.randomPreview()
         } catch {
             installError = error.localizedDescription
@@ -687,10 +823,20 @@ struct EmptyGalleryCard: View {
         .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 18))
     }
 }
-
 struct DictionaryTab: View {
     @ObservedObject var store: AppDataStore
     let actions: SettingsActions
+    let initialPage: String
+    var isActive: Bool
+    @StateObject private var index = VocabularyLibraryIndex()
+    @State private var tab = "我的生词"
+    @State private var notebookQuery = NotebookQuery()
+    @State private var libraryQuery = DictionaryLibraryQuery()
+    @State private var notebookPage = 1
+    @State private var notebookPageSize = 20
+    @State private var libraryPage = 1
+    @State private var libraryPageSize = 12
+    @State private var copied = false
     @State private var pdfDraft: DictionaryImportDraft?
     @State private var isImportingPDF = false
     @State private var importError: String?
@@ -699,71 +845,45 @@ struct DictionaryTab: View {
     @State private var apiKeySaved = false
     @State private var modelInput = ""
     @State private var deepSeekBaseURLInput = ""
-    @State private var selectedCategory = "全部"
+
+    init(store: AppDataStore, actions: SettingsActions, initialPage: String = "我的生词", isActive: Bool = true) {
+        self.store = store
+        self.actions = actions
+        self.initialPage = initialPage
+        self.isActive = isActive
+        _tab = State(initialValue: initialPage)
+    }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
-                sectionHeader("词典学习", subtitle: "导入 CSV/JSON 或可复制文本 PDF，确认后启用词典。")
-
-                HStack(spacing: 10) {
-                    PrimaryActionButton(title: "导入 CSV/JSON", systemImage: "square.and.arrow.down", action: actions.importDictionary)
-                    PrimaryActionButton(title: isImportingPDF ? "PDF 解析中..." : "导入 PDF 词典", systemImage: "doc.richtext", action: importPDFDictionary)
-                    Menu {
-                        Button("打开 CSV 模板", action: actions.openCSVTemplate)
-                        Button("打开 JSON 模板", action: actions.openJSONTemplate)
-                        Button("查看导入格式", action: actions.showImportFormat)
-                    } label: {
-                        Label("模板与格式", systemImage: "doc.text")
-                    }.frame(maxWidth: .infinity)
+        VStack(alignment: .leading, spacing: 16) {
+            Group {
+                switch tab {
+                case "我的生词":
+                    PersonalVocabularyPanel(store: store, index: index, query: $notebookQuery, page: $notebookPage, pageSize: $notebookPageSize)
+                case "词典库":
+                    dictionaryLibrary
+                case "连接与 AI":
+                    connectionPanel
+                default:
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 20) {
+                            learningPacePanel
+                            reviewPlanPanel
+                        }.frame(maxWidth: .infinity, alignment: .leading).padding(.trailing, 4)
+                    }.scrollIndicators(.visible)
                 }
-
-                learningPacePanel
-
-                PersonalVocabularyPanel(store: store)
-
-                openAISettingsPanel
-
-                dictionaryCategoryFilter
-
-                if let importError {
-                    Text(importError)
-                        .font(.caption)
-                        .foregroundStyle(.red)
-                } else if let importSuccess {
-                    Text(importSuccess)
-                        .font(.caption)
-                        .foregroundStyle(.green)
-                }
-
-                if filteredDictionarySummaries.isEmpty {
-                    VStack(spacing: 8) {
-                        Image(systemName: "tray")
-                            .font(.title2)
-                            .foregroundStyle(.secondary)
-                        Text("这个分类下还没有词典")
-                            .font(.headline)
-                        Text("可以编辑词典卡片的分类，或导入新的词典。")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                    .frame(maxWidth: .infinity)
-                    .padding(28)
-                    .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 16))
-                } else {
-                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 260), spacing: 14)], spacing: 14) {
-                        ForEach(filteredDictionarySummaries) { summary in
-                            DictionaryCard(store: store, summary: summary)
-                        }
-                    }
-                    .padding(.bottom, 12)
-                }
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.trailing, 4)
+            }.frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .scrollIndicators(.visible)
-        .sheet(item: $pdfDraft) { draft in
+        .task(id: store.libraryRevision) { await index.reload(store: store, now: Date()) }
+        .onAppear { if tab == "连接与 AI" { syncProviderInputs() } }
+        .onChange(of: initialPage) { _, page in
+            tab = page
+            if page == "连接与 AI" { syncProviderInputs() }
+        }
+        .onReceive(Timer.publish(every: 60, on: .main, in: .common).autoconnect()) { now in
+            Task { await index.reload(store: store, now: now) }
+        }
+        .sheet(item: Binding(get: { isActive && tab == "词典库" ? pdfDraft : nil }, set: { _ in })) { draft in
             DictionaryDraftSheet(
                 initialDraft: draft,
                 onSave: { draftToSave in
@@ -772,98 +892,96 @@ struct DictionaryTab: View {
                         importSuccess = "已导入 \(pack.entries.count) 个词：\(pack.name)"
                         importError = nil
                         pdfDraft = nil
-                    } catch {
-                        importError = error.localizedDescription
-                    }
+                    } catch { importError = error.localizedDescription }
                 },
-                onCancel: {
-                    pdfDraft = nil
-                },
-                generateExamples: { draftToGenerate in
-                    try await store.generateExamples(for: draftToGenerate)
-                },
-                parseWithDeepSeek: { draftToParse in
-                    try await store.parsePDFDraftWithDeepSeek(draftToParse)
-                }
+                onCancel: { pdfDraft = nil },
+                generateExamples: { try await store.generateExamples(for: $0) },
+                parseWithDeepSeek: { try await store.parsePDFDraftWithDeepSeek($0) }
             )
-        }
-        .onAppear {
-            syncProviderInputs()
+            .interactiveDismissDisabled()
         }
     }
 
-    private var dictionaryCategoryFilter: some View {
-        let summaries = store.dictionarySummaries()
-        let categories = dictionaryCategories(from: summaries)
-        return VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Label("分类筛选", systemImage: "line.3.horizontal.decrease.circle")
-                    .font(.headline)
-                Spacer()
-                Text("当前显示 \(filteredDictionarySummaries.count) 个词典")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
-                    ForEach(categories, id: \.self) { category in
-                        categoryFilterButton(
-                            title: category,
-                            count: dictionaryCount(for: category, in: summaries)
-                        )
-                    }
+    private var connectionPanel: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 20) {
+                Label("Chrome 浏览器收藏", systemImage: "globe").font(.headline)
+                Text("127.0.0.1:\(String(store.settings.serverPort))").font(.body.monospaced())
+                HStack {
+                    Button {
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString(store.captureToken, forType: .string)
+                        copied = true
+                    } label: { Label(copied ? "配对码已复制" : "复制 Chrome 配对码", systemImage: "doc.on.doc") }
+                    Button { openExtension() } label: { Label("打开 Chrome 扩展文件夹", systemImage: "folder") }
                 }
-                .padding(.vertical, 1)
+                Divider()
+                openAISettingsPanel
+                if let importError { Text(importError).font(.caption).foregroundStyle(.red) }
+                if let importSuccess { Text(importSuccess).font(.caption).foregroundStyle(.secondary) }
+            }.frame(maxWidth: 760, alignment: .leading).padding(.trailing, 4)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }.scrollIndicators(.visible)
+    }
+
+    private var dictionaryLibrary: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 10) {
+                Button(action: actions.importDictionary) { Label("导入 CSV/JSON", systemImage: "square.and.arrow.down") }
+                Button(action: importPDFDictionary) { Label(isImportingPDF ? "PDF 解析中…" : "导入 PDF", systemImage: "doc.richtext") }
+                    .disabled(isImportingPDF)
+                Menu {
+                    Button("打开 CSV 模板", action: actions.openCSVTemplate)
+                    Button("打开 JSON 模板", action: actions.openJSONTemplate)
+                    Button("查看导入格式", action: actions.showImportFormat)
+                    Divider()
+                    Button("恢复示例词典") {
+                        do { try store.restoreSampleDictionaries(); importSuccess = nil; importError = nil }
+                        catch { importError = error.localizedDescription }
+                    }
+                } label: { Label("模板与格式", systemImage: "doc.text") }
+                Spacer()
+                Text("\(index.dictionaries.count) 个词典").font(.caption).foregroundStyle(.secondary)
             }
+            if let importError { Text(importError).font(.caption).foregroundStyle(.red) }
+            else if let importSuccess { Text(importSuccess).font(.caption).foregroundStyle(.secondary) }
+            DictionaryLibraryPanel(store: store, index: index, query: $libraryQuery, page: $libraryPage, pageSize: $libraryPageSize)
         }
-        .padding(.vertical, 14)
-        .overlay(alignment: .bottom) { Divider() }
     }
 
-    private var filteredDictionarySummaries: [DictionarySummary] {
-        let summaries = store.dictionarySummaries()
-        let validSelection = dictionaryCategories(from: summaries).contains(selectedCategory) ? selectedCategory : "全部"
-        guard validSelection != "全部" else { return summaries }
-        return summaries.filter { dictionaryCategoryLabel($0) == validSelection }
-    }
-
-    private func categoryFilterButton(title: String, count: Int) -> some View {
-        let isSelected = title == selectedCategory || (!dictionaryCategories(from: store.dictionarySummaries()).contains(selectedCategory) && title == "全部")
-        return Button {
-            selectedCategory = title
-        } label: {
-            HStack(spacing: 6) {
-                Text(title)
-                    .font(.subheadline.weight(.semibold))
-                Text("\(count)")
-                    .font(.caption2.weight(.bold))
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 2)
-                    .background(isSelected ? Color.white.opacity(0.22) : Color.black.opacity(0.06), in: Capsule())
+    private var reviewPlanPanel: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            Label("新词与复习", systemImage: "arrow.triangle.2.circlepath").font(.headline)
+            VocabularyLimitControl(title: "每天首次学习词数", count: Binding(
+                get: { store.settings.dailyNewVocabularyLimit }, set: {
+                    store.objectWillChange.send(); store.settings.dailyNewVocabularyLimit = $0; store.saveSettings()
+                }), unlimited: Binding(get: { store.settings.dailyNewVocabularyUnlimited }, set: {
+                    store.objectWillChange.send(); store.settings.dailyNewVocabularyUnlimited = $0; store.saveSettings()
+                }), minimum: 0)
+            Toggle("先回忆再看释义", isOn: Binding(get: { store.settings.vocabularyRecallMode }, set: {
+                store.objectWillChange.send(); store.settings.vocabularyRecallMode = $0; store.saveSettings()
+            })).toggleStyle(.switch)
+            HStack {
+                Text("目标保持率 \(Int((store.settings.vocabularyRetention * 100).rounded()))%")
+                Slider(value: Binding(get: { store.settings.vocabularyRetention }, set: {
+                    store.objectWillChange.send(); store.settings.vocabularyRetention = $0; store.saveSettings()
+                }), in: 0.8...0.95, step: 0.01).frame(maxWidth: 220)
             }
-            .foregroundStyle(isSelected ? Color.white : Color.primary)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            .background(isSelected ? Color.accentColor : Color(nsColor: .windowBackgroundColor), in: Capsule())
-            .overlay(Capsule().stroke(Color.black.opacity(isSelected ? 0 : 0.08)))
-        }
-        .buttonStyle(.plain)
+            Divider()
+            Text("个人生词学习来源").font(.headline)
+            ForEach(index.personalSources, id: \.self) { id in
+                Toggle(id == "personal-en" ? "英语生词" : id == "personal-ja" ? "日语生词" : "其他生词", isOn: Binding(get: { store.settings.enabledDictionaryIDs.contains(id) },
+                    set: { store.toggleDictionary(id, isEnabled: $0) })).toggleStyle(.checkbox)
+            }
+        }.padding(.vertical, 8)
     }
 
-    private func dictionaryCategories(from summaries: [DictionarySummary]) -> [String] {
-        let categories = Set(summaries.map(dictionaryCategoryLabel))
-        let sorted = categories.sorted { $0.localizedStandardCompare($1) == .orderedAscending }
-        return ["全部"] + sorted
-    }
-
-    private func dictionaryCount(for category: String, in summaries: [DictionarySummary]) -> Int {
-        guard category != "全部" else { return summaries.count }
-        return summaries.filter { dictionaryCategoryLabel($0) == category }.count
-    }
-
-    private func dictionaryCategoryLabel(_ summary: DictionarySummary) -> String {
-        let category = summary.category?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        return category.isEmpty ? "未分类" : category
+    private func openExtension() {
+        let candidates = [Bundle.main.resourceURL?.appendingPathComponent("ChromeExtension"),
+            URL(fileURLWithPath: FileManager.default.currentDirectoryPath).appendingPathComponent("ChromeExtension")]
+        if let url = candidates.compactMap({ $0 }).first(where: { FileManager.default.fileExists(atPath: $0.appendingPathComponent("manifest.json").path) }) {
+            NSWorkspace.shared.open(url)
+        } else { importError = "请解压完整发布包，使用其中的 ChromeExtension 文件夹。" }
     }
 
     private var learningPacePanel: some View {
@@ -878,22 +996,25 @@ struct DictionaryTab: View {
             }
 
             HStack(alignment: .top, spacing: 16) {
-                Stepper(
-                    value: Binding(
+                VocabularyLimitControl(title: "每天自动展示次数", count: Binding(
                         get: { store.settings.dailyVocabularyLimit },
                         set: { store.setDailyVocabularyLimit($0) }
-                    ),
-                    in: 1...50
-                ) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("每天自动展示 \(store.settings.dailyVocabularyLimit) 个词")
-                            .font(.subheadline.weight(.semibold))
-                        Text("范围 1-50；手动抽词不受限制。")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                    ), unlimited: Binding(get: { store.settings.dailyVocabularyUnlimited }, set: {
+                        store.objectWillChange.send(); store.settings.dailyVocabularyUnlimited = $0; store.saveSettings()
+                    }))
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("最短弹出间隔").font(.subheadline.weight(.semibold))
+                    HStack {
+                        TextField("最短弹出间隔", value: Binding(get: { store.settings.vocabularyMinimumIntervalMinutes }, set: {
+                            store.objectWillChange.send(); store.settings.vocabularyMinimumIntervalMinutes = max(1, $0); store.saveSettings()
+                        }), format: .number.grouping(.never)).textFieldStyle(.roundedBorder).frame(width: 60)
+                        Text("分钟")
                     }
                 }
+                Spacer()
+            }
 
+            HStack(alignment: .top, spacing: 16) {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("每天学习时段")
                         .font(.subheadline.weight(.semibold))
@@ -1276,24 +1397,34 @@ struct DictionaryCard: View {
     @State private var categoryInput = ""
     @State private var error: String?
     @State private var confirmDelete = false
+    @State private var deleteError: String?
+
+    private var visibleDescription: String {
+        (summary.pack.description ?? "").components(separatedBy: "\n")
+            .filter { !$0.hasPrefix("分类：") }.joined(separator: "\n")
+    }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(summary.pack.name)
                         .font(.system(size: 16, weight: .bold))
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, minHeight: 38, maxHeight: 38, alignment: .topLeading)
+                        .help(summary.pack.name)
                     Text("\(summary.pack.entries.count) 个词")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
                 Toggle("", isOn: Binding(
-                    get: { summary.isEnabled },
+                    get: { store.settings.enabledDictionaryIDs.contains(summary.pack.id) },
                     set: { store.toggleDictionary(summary.pack.id, isEnabled: $0) }
                 ))
                 .toggleStyle(.switch)
-            }
+            }.frame(height: 54, alignment: .top)
             HStack(spacing: 6) {
                 Text(summary.category ?? "未分类")
                     .font(.caption2.weight(.semibold))
@@ -1302,83 +1433,73 @@ struct DictionaryCard: View {
                     .background(theme.wash, in: RoundedRectangle(cornerRadius: 4))
                     .foregroundStyle(theme.ink)
                 if summary.isBuiltIn {
-                    Text("内置")
+                    Text("示例")
                         .font(.caption2.weight(.semibold))
                         .padding(.horizontal, 8)
                         .padding(.vertical, 4)
                         .background(theme.wash, in: RoundedRectangle(cornerRadius: 4))
                         .foregroundStyle(.secondary)
                 }
-            }
-            if let description = summary.pack.description {
-                let visibleDescription = description.components(separatedBy: "\n").filter { !$0.hasPrefix("分类：") }.joined(separator: "\n")
-                if !visibleDescription.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    Text(visibleDescription)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(2)
-                }
-            }
+            }.frame(height: 22, alignment: .leading)
+            Text(visibleDescription)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(2)
+                .frame(maxWidth: .infinity, minHeight: 32, maxHeight: 32, alignment: .topLeading)
             HStack(spacing: 8) {
                 StatPill(label: "已学", value: summary.learnedCount, color: .green)
                 StatPill(label: "待加强", value: summary.unknownCount, color: .orange)
                 StatPill(label: "跳过", value: summary.skippedCount, color: .secondary)
-            }
-            if isEditing {
-                VStack(spacing: 8) {
-                    TextField("词典名称", text: $nameInput)
-                        .textFieldStyle(.roundedBorder)
-                    TextField("分类，如 IELTS / 日语 / 工作术语", text: $categoryInput)
-                        .textFieldStyle(.roundedBorder)
-                    if let error {
-                        Text(error)
-                            .font(.caption2)
-                            .foregroundStyle(.red)
-                    }
-                    HStack {
-                        Button("取消") {
-                            isEditing = false
-                            error = nil
-                        }
-                        Spacer()
-                        Button("保存") {
-                            saveDictionaryMeta()
-                        }
-                        .buttonStyle(.borderedProminent)
-                    }
-                }
-            } else {
-                HStack {
+            }.frame(height: 48)
+            Spacer(minLength: 0)
+            HStack {
+                if !summary.isBuiltIn {
                     Button("编辑") {
                         nameInput = summary.pack.name
                         categoryInput = summary.category ?? ""
                         error = nil
                         isEditing = true
                     }
-                    .disabled(summary.isBuiltIn)
-                    Spacer()
-                    Button(role: .destructive) {
-                        confirmDelete = true
-                    } label: {
-                        Image(systemName: "trash")
-                    }
-                    .buttonStyle(.borderless)
-                    .disabled(summary.isBuiltIn)
-                    .help(summary.isBuiltIn ? "内置示例词典不能删除，只能关闭启用。" : "删除词典")
                 }
-                .font(.caption)
-            }
+                Spacer()
+                Button(role: .destructive) { confirmDelete = true } label: { Image(systemName: "trash") }
+                    .buttonStyle(.borderless)
+                    .help(summary.isBuiltIn ? "移除示例，保留学习记录" : "移到废纸篓，保留学习记录")
+                    .accessibilityLabel("移除词典 \(summary.pack.name)")
+            }.font(.caption).frame(height: 26)
         }
         .padding(16)
+        .frame(maxWidth: .infinity)
+        .frame(height: 272, alignment: .topLeading)
         .background(theme.paper, in: RoundedRectangle(cornerRadius: 7))
         .overlay(RoundedRectangle(cornerRadius: 7).stroke(theme.line))
-        .confirmationDialog("删除词典？", isPresented: $confirmDelete) {
-            Button("删除 \(summary.pack.name)", role: .destructive) {
+        .sheet(isPresented: $isEditing) {
+            VStack(alignment: .leading, spacing: 16) {
+                Text("编辑词典").font(.title2.weight(.semibold))
+                TextField("词典名称", text: $nameInput).textFieldStyle(.roundedBorder)
+                TextField("分类", text: $categoryInput).textFieldStyle(.roundedBorder)
+                if let error { Text(error).font(.caption).foregroundStyle(.red) }
+                HStack {
+                    Button("取消", role: .cancel) { isEditing = false; error = nil }
+                    Spacer()
+                    Button("保存", action: saveDictionaryMeta).buttonStyle(.borderedProminent)
+                }
+            }.padding(24).frame(width: 360)
+        }
+        .confirmationDialog(summary.isBuiltIn ? "移除示例词典？" : "将词典移到废纸篓？", isPresented: $confirmDelete) {
+            Button(summary.isBuiltIn ? "移除 \(summary.pack.name)" : "将 \(summary.pack.name) 移到废纸篓", role: .destructive) {
                 deleteDictionary()
             }
             Button("取消", role: .cancel) {}
         } message: {
-            Text("会删除本地词典文件；学习记录默认保留，重新导入同 ID 词典后还能继续使用。")
+            Text(summary.isBuiltIn ? "学习记录会保留，可在“模板与格式”中恢复示例词典。" : "词典文件将移到系统废纸篓，学习记录默认保留。可从废纸篓放回文件，或重新导入同 ID 词典以继续学习。")
+        }
+        .alert("无法移除词典", isPresented: Binding(
+            get: { deleteError != nil }, set: { if !$0 { deleteError = nil } }
+        )) {
+            Button("好", role: .cancel) { deleteError = nil }
+        } message: {
+            Text(deleteError ?? "")
         }
     }
 
@@ -1395,9 +1516,9 @@ struct DictionaryCard: View {
     private func deleteDictionary() {
         do {
             try store.deleteDictionary(summary.pack.id)
-            error = nil
+            deleteError = nil
         } catch {
-            self.error = error.localizedDescription
+            deleteError = error.localizedDescription
         }
     }
 }
@@ -1597,7 +1718,7 @@ struct PixelPetPreview: View {
 private func sectionHeader(_ title: String, subtitle: String) -> some View {
     VStack(alignment: .leading, spacing: 5) {
         Text(title)
-            .font(.system(size: 28, weight: .bold, design: .rounded))
+            .font(.system(size: 25, weight: .semibold))
         Text(subtitle)
             .foregroundStyle(.secondary)
     }

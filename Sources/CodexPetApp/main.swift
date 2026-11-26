@@ -2,7 +2,7 @@ import AppKit
 import CodexPetCore
 import UniformTypeIdentifiers
 
-final class AppDelegate: NSObject, NSApplicationDelegate, PetContentViewDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, PetContentViewDelegate, NSMenuDelegate {
     private var store: AppDataStore!
     private var window: NSPanel!
     private var contentView: PetContentView!
@@ -25,6 +25,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, PetContentViewDelegate
     private var vocabTimer: Timer?
     private var idleCuteTimer: Timer?
     private var vocabularyQuestionTimer: Timer?
+    private var manualVocabularyTimer: Timer?
     private var nextAutomaticVocabularyAt = Date().addingTimeInterval(90)
     private var vocabularyScheduleKey: String?
 
@@ -66,16 +67,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, PetContentViewDelegate
     }
 
     private func setupWindow() {
-        let size = NSSize(width: 420, height: 500)
         let screenFrame = NSScreen.main?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1280, height: 800)
-        let fallbackOrigin = CGPoint(x: screenFrame.maxX - size.width - 42, y: screenFrame.minY + 60)
-        let origin = visibleWindowOrigin(
-            savedOrigin: store.settings.lastWindowOrigin,
-            fallbackOrigin: fallbackOrigin,
-            size: size
-        )
+        let placement = PetWindowPlacement.frame(savedOrigin: store.settings.lastWindowOrigin,
+            screens: NSScreen.screens.map(\.visibleFrame), main: screenFrame)
+        let size = placement.size
         window = NSPanel(
-            contentRect: NSRect(origin: origin, size: size),
+            contentRect: placement,
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: false
@@ -103,25 +100,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, PetContentViewDelegate
         contentView.applyTheme(store.settings.visualTheme)
     }
 
-    private func visibleWindowOrigin(savedOrigin: CGPoint?, fallbackOrigin: CGPoint, size: NSSize) -> CGPoint {
-        let frames = NSScreen.screens.map(\.visibleFrame)
-        let fallbackFrame = NSScreen.main?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1280, height: 800)
-        if let savedOrigin {
-            let savedRect = NSRect(origin: savedOrigin, size: size)
-            if let frame = frames.first(where: { $0.intersection(savedRect).width >= 80 && $0.intersection(savedRect).height >= 80 }) {
-                return clampedOrigin(savedOrigin, size: size, in: frame)
-            }
-        }
-        return clampedOrigin(fallbackOrigin, size: size, in: fallbackFrame)
-    }
-
-    private func clampedOrigin(_ origin: CGPoint, size: NSSize, in frame: NSRect) -> CGPoint {
-        CGPoint(
-            x: min(max(origin.x, frame.minX + 8), frame.maxX - size.width - 8),
-            y: min(max(origin.y, frame.minY + 8), frame.maxY - size.height - 8)
-        )
-    }
-
     private func setupMenu() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         if let icon = statusBarIcon() {
@@ -133,6 +111,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, PetContentViewDelegate
         }
 
         let menu = NSMenu()
+        menu.delegate = self
         menu.addItem(NSMenuItem(title: "打开配置中心...", action: #selector(showSettingsCenter), keyEquivalent: ","))
         menu.addItem(NSMenuItem.separator())
         menu.addItem(NSMenuItem(title: "显示 \(AppBrand.displayName)", action: #selector(showPet), keyEquivalent: ""))
@@ -292,35 +271,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, PetContentViewDelegate
         store.progressState.apply(event)
         store.objectWillChange.send()
         let isCompletion = event.status == .done || event.progress == 100
-        progressPriorityUntil = Date().addingTimeInterval(isCompletion ? 12 : 8)
         setTemporaryAction(event.status.petAction, duration: isCompletion ? 3.2 : 8)
-        let progressText = event.progress.map { " · \($0)%" } ?? ""
-        let stageText = isCompletion ? "任务完成" : event.stage
-        let bodyText: String
-        if isCompletion {
-            bodyText = event.message.isEmpty ? "\(event.source) 会话已完成。" : event.message
-        } else {
-            bodyText = event.message.isEmpty ? event.status.rawValue : event.message
-        }
-        contentView.showMessage(
-            kicker: "\(event.source)\(progressText)",
-            title: stageText,
-            body: bodyText,
-            showActions: false,
-            autoHideAfter: isCompletion ? 12 : 8
-        )
+        contentView.showProgressEvent(event)
+        progressPriorityUntil = contentView.progressPriorityDeadline ?? Date().addingTimeInterval(isCompletion ? 12 : 8)
         if event.status == .done || event.status == .failed {
             queuedVocabulary = true
         }
+        if manualVocabularyTimer != nil { requestVocabularyNow() }
     }
 
     private func showVocabularyRespectingPriority() {
         let now = Date()
-        let key = "\(VocabularyDisplayScheduler.todayKey(for: now))-\(store.settings.vocabularyStudyStartMinute)-\(store.settings.vocabularyStudyEndMinute)-\(store.settings.dailyVocabularyLimit)-\(store.settings.dailyNewVocabularyLimit)"
+        let key = "\(VocabularyDisplayScheduler.todayKey(for: now))-\(store.settings.vocabularyStudyStartMinute)-\(store.settings.vocabularyStudyEndMinute)-\(store.settings.dailyVocabularyLimit)-\(store.settings.dailyNewVocabularyLimit)-\(store.settings.dailyVocabularyUnlimited)-\(store.settings.dailyNewVocabularyUnlimited)-\(store.settings.vocabularyMinimumIntervalMinutes)"
         if let oldKey = vocabularyScheduleKey, oldKey != key {
-            clearActiveVocabularyQuestion()
-            contentView.hideBubble(animated: true)
-            nextAutomaticVocabularyAt = now
+            nextAutomaticVocabularyAt = max(now, (store.settings.lastAutomaticVocabularyDate ?? .distantPast).addingTimeInterval(Double(store.settings.vocabularyMinimumIntervalMinutes) * 60))
         }
         vocabularyScheduleKey = key
         store.resetVocabularyScheduleIfNeeded(now: now)
@@ -330,6 +294,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, PetContentViewDelegate
             return
         }
         guard now >= nextAutomaticVocabularyAt else { return }
+        guard now.timeIntervalSince(store.settings.lastAutomaticVocabularyDate ?? .distantPast) >= Double(store.settings.vocabularyMinimumIntervalMinutes) * 60 else { return }
         guard store.canShowAutomaticVocabulary(now: now) else { return }
         if queuedVocabulary || now >= nextAutomaticVocabularyAt {
             queuedVocabulary = false
@@ -376,10 +341,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, PetContentViewDelegate
         return true
     }
 
-    private func vocabularyPromptBody(for word: ScopedDictionaryEntry) -> String {
-        let reading = cleanVocabularyField(word.entry.phonetic ?? word.entry.reading)
-        return reading.isEmpty ? "" : "发音：\(reading)"
-    }
 
     private func configureVocabularyControls(for word: ScopedDictionaryEntry) {
         contentView.configureVocabularyControls(revealed: vocabularyAnswerRevealed,
@@ -389,11 +350,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, PetContentViewDelegate
     }
 
     private func renderVocabularyCard(_ word: ScopedDictionaryEntry) {
-        contentView.showVocabularyCard(kicker: word.dictionaryName, title: word.entry.term,
-            prompt: vocabularyPromptBody(for: word), answer: vocabularyCardBody(for: word),
+        contentView.showVocabularyCard(kicker: word.dictionaryName, entry: word.entry,
             revealed: vocabularyAnswerRevealed, footer: vocabularyFooterText(),
             known: store.reviewPreview(word, action: .known), unknown: store.reviewPreview(word, action: .unknown),
-            hard: store.reviewPreview(word, action: .hard))
+            hard: store.reviewPreview(word, action: .hard), translationStatus: exampleTranslationStatus)
     }
 
     private func completeExampleTranslation(_ word: ScopedDictionaryEntry) {
@@ -436,56 +396,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, PetContentViewDelegate
         completeExampleTranslation(word)
     }
 
-    private func vocabularyCardBody(for word: ScopedDictionaryEntry) -> String {
-        var sections: [String] = []
-        let reading = cleanVocabularyField(word.entry.phonetic ?? word.entry.reading)
-        if !reading.isEmpty {
-            if word.entry.phonetic != nil {
-                sections.append("发音：\(reading)")
-            } else {
-                sections.append("读音：\(reading)")
-            }
-        } else if looksLikeEnglishTerm(word.entry.term) {
-            sections.append("拼写：\(word.entry.term)")
-        }
-
-        let meaning = cleanVocabularyField(word.entry.meaning)
-        if !meaning.isEmpty {
-            sections.append(meaning)
-        } else {
-            sections.append("[释义]\n还没有释义，可以在词典管理里补充。")
-        }
-
-        if let example = cleanOptionalVocabularyField(word.entry.example) {
-            sections.append(example)
-            if let translation = cleanOptionalVocabularyField(word.entry.exampleTranslation) {
-                sections.append(translation)
-            } else {
-                sections.append(exampleTranslationStatus ?? "译文暂缺")
-            }
-        }
-
-        if let hint = cleanOptionalVocabularyField(word.entry.hint) {
-            sections.append("[提示]\n\(hint)")
-        }
-
-        return sections.joined(separator: "\n")
-    }
-
-    private func cleanOptionalVocabularyField(_ value: String?) -> String? {
-        let cleaned = cleanVocabularyField(value)
-        return cleaned.isEmpty ? nil : cleaned
-    }
-
-    private func cleanVocabularyField(_ value: String?) -> String {
-        (value ?? "")
-            .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
-    private func looksLikeEnglishTerm(_ value: String) -> Bool {
-        value.range(of: #"^[A-Za-z][A-Za-z\s'./-]*$"#, options: .regularExpression) != nil
-    }
 
     private func vocabularyFooterText() -> String {
         let limit = max(1, store.settings.dailyVocabularyLimit)
@@ -495,10 +405,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, PetContentViewDelegate
 
     private func scheduleNextAutomaticVocabulary(after date: Date) {
         let snapshot = VocabularyDisplayScheduler.resetIfNeeded(store.vocabularyScheduleSnapshot, now: date)
-        let remainingWords = max(1, snapshot.dailyLimit - snapshot.shownCount)
-        let remainingSeconds = VocabularyDisplayScheduler.secondsUntilStudyWindowEnd(snapshot, now: date)
-        let interval = max(60, remainingSeconds / Double(remainingWords + 1))
-        nextAutomaticVocabularyAt = date.addingTimeInterval(interval * Double.random(in: 0.75...1.25))
+        let interval = VocabularyDisplayScheduler.automaticInterval(snapshot, now: date,
+            unlimited: store.settings.dailyVocabularyUnlimited, minimumMinutes: store.settings.vocabularyMinimumIntervalMinutes,
+            jitter: Double.random(in: 0.75...1.25))
+        nextAutomaticVocabularyAt = date.addingTimeInterval(interval)
     }
 
     private func clearActiveVocabularyQuestion() {
@@ -587,11 +497,36 @@ final class AppDelegate: NSObject, NSApplicationDelegate, PetContentViewDelegate
     }
 
     func requestVocabularyNow() {
+        manualVocabularyTimer?.invalidate()
+        manualVocabularyTimer = nil
+        guard activeWord == nil else { return }
+        let remainingPriority = progressPriorityUntil.timeIntervalSinceNow
+        if remainingPriority > 0 {
+            manualVocabularyTimer = Timer.scheduledTimer(withTimeInterval: remainingPriority + 0.05, repeats: false) { [weak self] _ in
+                self?.requestVocabularyNow()
+            }
+            if let manualVocabularyTimer { RunLoop.main.add(manualVocabularyTimer, forMode: .common) }
+            return
+        }
         _ = showVocabularyNow(isAutomatic: false)
     }
 
     func openSettings() {
         showSettingsCenter()
+    }
+
+    var petWalkingPaused: Bool { store?.settings.walkingPaused ?? false }
+
+    func togglePetWalking() {
+        store.setWalkingPaused(!store.settings.walkingPaused)
+        behaviorEngine.snap(to: window.frame.origin)
+    }
+
+    func menuNeedsUpdate(_ menu: NSMenu) {
+        for item in menu.items {
+            if item.action == #selector(toggleWalking) { item.state = store.settings.walkingPaused ? .on : .off }
+            if item.action == #selector(toggleLockPosition) { item.state = store.settings.positionLocked ? .on : .off }
+        }
     }
 
     func petClicked() {
@@ -732,7 +667,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, PetContentViewDelegate
     }
 
     @objc private func wordNow() {
-        _ = showVocabularyNow(isAutomatic: false)
+        requestVocabularyNow()
     }
 
     @objc private func chooseSyncFolder() {
@@ -799,9 +734,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, PetContentViewDelegate
     }
 
     @objc private func toggleWalking(_ item: NSMenuItem) {
-        store.settings.walkingPaused.toggle()
+        togglePetWalking()
         item.state = store.settings.walkingPaused ? .on : .off
-        store.saveSettings()
     }
 
     @objc private func toggleLockPosition(_ item: NSMenuItem) {
@@ -817,6 +751,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, PetContentViewDelegate
 }
 
 let app = NSApplication.shared
+if CommandLine.arguments.contains("--export-user-guide") {
+    Task { @MainActor in
+        do { try await UserGuideSnapshots.run(); exit(0) }
+        catch { fputs("user-guide snapshots failed: \(error)\n", stderr); exit(1) }
+    }
+    app.run()
+    exit(1)
+}
 if CommandLine.arguments.contains("--self-test-enrichment") {
     Task { @MainActor in
         do { try await NotebookRegression.runEnrichment(); exit(0) }

@@ -5,9 +5,26 @@ import SwiftUI
 // The release binary can run this isolated check on Macs with Command Line Tools but no XCTest.
 enum NotebookRegression {
     @MainActor static func runEnrichment() async throws {
+        try await LibraryBrowserRegression.run()
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: root) }
         let store = try AppDataStore(root: root)
+        let legacyPace = try JSONFileStore.decoder.decode(AppSettings.self, from: Data("{\"dailyVocabularyLimit\":50,\"dailyNewVocabularyLimit\":20}".utf8))
+        precondition(!legacyPace.dailyVocabularyUnlimited && !legacyPace.dailyNewVocabularyUnlimited)
+        precondition(legacyPace.dailyVocabularyLimit == 50 && legacyPace.dailyNewVocabularyLimit == 20)
+        store.settings.dailyVocabularyLimit = 500
+        store.settings.dailyNewVocabularyLimit = 100
+        store.settings.dailyVocabularyUnlimited = true
+        store.settings.dailyNewVocabularyUnlimited = true
+        store.settings.vocabularyMinimumIntervalMinutes = 7
+        store.settings.lastAutomaticVocabularyDate = Date(timeIntervalSince1970: 1_800_000_000)
+        store.saveSettings()
+        let pace = try AppDataStore(root: root)
+        precondition(pace.settings.dailyVocabularyLimit == 500 && pace.settings.dailyNewVocabularyLimit == 100)
+        precondition(pace.settings.dailyVocabularyUnlimited && pace.settings.dailyNewVocabularyUnlimited)
+        precondition(pace.settings.vocabularyMinimumIntervalMinutes == 7 && pace.settings.lastAutomaticVocabularyDate == store.settings.lastAutomaticVocabularyDate)
+        store.settings = AppSettings()
+        store.saveSettings()
         store.settings.deepSeekModel = "deepseek-chat"
         store.saveSettings()
         let migrated = try AppDataStore(root: root)
@@ -56,6 +73,13 @@ enum NotebookRegression {
     }
 
     @MainActor static func run() throws {
+        precondition(AppBrand.displayName == "PetPetKnows")
+        try SettingsRedesignRegression.run()
+        try VocabularyCardRegression.run()
+        try CompanionProgressRegression.run()
+        try CompanionVisualRegression.run()
+        try CompanionConfigurationRegression.run()
+        try CompanionReadabilityRegression.run()
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: root) }
         let store = try AppDataStore(root: root)
@@ -171,6 +195,38 @@ enum NotebookRegression {
         defer { withExtendedLifetime(window) {} }
         let spy = NotebookFeedbackSpy()
         view.delegate = spy
+        view.layoutSubtreeIfNeeded()
+        func mouse(_ type: NSEvent.EventType, at point: NSPoint, modifiers: NSEvent.ModifierFlags = []) -> NSEvent {
+            NSEvent.mouseEvent(with: type, location: point, modifierFlags: modifiers, timestamp: 0,
+                windowNumber: window.windowNumber, context: nil, eventNumber: 1, clickCount: 1, pressure: 1)!
+        }
+        let petPoint = NSPoint(x: 210, y: 89)
+        let rightMenu = view.menu(for: mouse(.rightMouseDown, at: petPoint))!
+        precondition(rightMenu.items.map(\.title) == ["单词", "配置中心…", "", "暂停走动"] && spy.requestedWords == 0, "Opening the menu must not request a word")
+        rightMenu.performActionForItem(at: 1)
+        precondition(spy.settingsRequests == 1 && spy.requestedWords == 0)
+        rightMenu.performActionForItem(at: 3)
+        precondition(spy.petWalkingPaused && view.menu(for: mouse(.rightMouseDown, at: petPoint))!.items[3].title == "继续走动")
+        rightMenu.performActionForItem(at: 0)
+        precondition(spy.requestedWords == 1 && spy.petClicks == 0, "Choosing the word menu item requests exactly once")
+        let controlMenu = view.menu(for: mouse(.leftMouseDown, at: petPoint, modifiers: .control))!
+        precondition(spy.requestedWords == 1, "Control-click offers the same menu, without automatic study")
+        controlMenu.performActionForItem(at: 0)
+        let beforeControlDrag = window.frame.origin
+        view.mouseDragged(with: mouse(.leftMouseDragged, at: NSPoint(x: petPoint.x + 12, y: petPoint.y), modifiers: .control))
+        view.mouseUp(with: mouse(.leftMouseUp, at: petPoint, modifiers: .control))
+        precondition(spy.requestedWords == 2 && spy.petClicks == 0 && window.frame.origin == beforeControlDrag)
+        view.mouseDown(with: mouse(.leftMouseDown, at: petPoint))
+        view.mouseUp(with: mouse(.leftMouseUp, at: petPoint))
+        precondition(spy.requestedWords == 2 && spy.petClicks == 1, "Ordinary left click keeps pet interaction")
+        view.mouseDown(with: mouse(.leftMouseDown, at: petPoint))
+        let beforeDrag = window.frame.origin
+        view.mouseDragged(with: mouse(.leftMouseDragged, at: NSPoint(x: petPoint.x + 12, y: petPoint.y)))
+        view.mouseUp(with: mouse(.leftMouseUp, at: petPoint))
+        precondition(spy.requestedWords == 2 && spy.petClicks == 1, "Dragging must not request words or trigger click feedback")
+        precondition(window.frame.origin != beforeDrag, "Left dragging must still move the pet window")
+        precondition(view.menu(for: mouse(.rightMouseDown, at: NSPoint(x: 2, y: 2))) == nil)
+        precondition(spy.requestedWords == 2, "Only pet bounds own the shortcut")
         view.showMessage(kicker: "我的生词本", title: "inherently", body: "/ɪnˈhɪərəntli/", showActions: true, footer: "今日 1/10", animated: false)
         view.configureVocabularyControls(revealed: false, known: "1天", unknown: "10分钟", hard: "15分钟")
         func buttons(_ parent: NSView) -> [NSButton] {
@@ -225,7 +281,8 @@ enum NotebookRegression {
         window.displayIfNeeded()
         view.showVocabularyCard(kicker: "日语", title: "これ", prompt: "读音：これ", answer: answer,
             revealed: true, footer: "今日 1/10", known: "1天", unknown: "10分钟", hard: "15分钟")
-        precondition(before.bubble == view.bubbleLayoutSnapshot.bubble, "Revealing must not resize or reposition the card")
+        precondition(before.bubble.minY == view.bubbleLayoutSnapshot.bubble.minY && before.bubble.width == view.bubbleLayoutSnapshot.bubble.width)
+        precondition(view.bubbleLayoutSnapshot.bubble.height >= before.bubble.height, "Revealing may expand the single existing card")
         precondition(view.bubbleLayoutSnapshot.controls.allSatisfy { $0.minX >= 24 && $0.maxX <= before.bubble.width - 24 && $0.minY >= 36 })
         let comicLayout = view.bubbleLayoutSnapshot
         view.applyTheme(.storybook)
@@ -276,6 +333,29 @@ enum NotebookRegression {
         }
         view.hideBubble(animated: false)
         precondition(!view.isBubbleVisible)
+        if let directory = ProcessInfo.processInfo.environment["WHISKYCLING_PET_CLICK_FIXTURE_DIR"] {
+            let fixtureRoot = URL(fileURLWithPath: directory)
+            guard !FileManager.default.fileExists(atPath: fixtureRoot.path) else { throw CocoaError(.fileWriteFileExists) }
+            let fixture = try AppDataStore(root: fixtureRoot)
+            let pack = DictionaryPack(id: "pet-click-fixture", name: "交互验收", entries: [
+                DictionaryEntry(term: "accommodate", phonetic: "/əˈkɒmədeɪt/", meaning: "v. 容纳；适应",
+                    example: "The room can accommodate ten people.", exampleTranslation: "这个房间可以容纳十个人。"),
+                DictionaryEntry(term: "coherent", phonetic: "/koʊˈhɪrənt/", meaning: "adj. 连贯的；一致的",
+                    example: "A coherent plan helps.", exampleTranslation: "连贯的计划很有帮助。")
+            ])
+            try JSONFileStore.save(pack, to: fixture.dictionariesURL.appendingPathComponent("pet-click-fixture.json"))
+            fixture.settings.enabledDictionaryIDs = [pack.id]
+            fixture.settings.walkingPaused = true
+            fixture.settings.serverPort = 4793
+            fixture.settings.dailyVocabularyLimit = 1
+            fixture.settings.dailyNewVocabularyLimit = 0
+            fixture.settings.vocabularyShownCountDate = VocabularyDisplayScheduler.todayKey(for: Date())
+            fixture.settings.vocabularyShownCount = 1
+            fixture.settings.vocabularyStudyStartMinute = 0
+            fixture.settings.vocabularyStudyEndMinute = 1
+            fixture.saveSettings()
+        }
+        print("pet-click-regression: right/Control-click offer a word menu without automatic study, selection requests once, left-click and drag preserved, outside-pet menu rejected")
         print("notebook-regression: theme migration, persistence, failed-save rollback, data isolation, stable native theme switching, bundled pets, nine actions, FSRS and native recall passed")
     }
 
@@ -288,12 +368,17 @@ enum NotebookRegression {
 private final class NotebookFeedbackSpy: PetContentViewDelegate {
     var revealed = 0
     var unknown = 0
+    var requestedWords = 0
+    var petClicks = 0
+    var settingsRequests = 0
+    var petWalkingPaused = false
     func markKnown() {}
     func markUnknown() { unknown += 1 }
     func markHard() {}
     func revealVocabularyAnswer() { revealed += 1 }
     func skipWord() {}
-    func requestVocabularyNow() {}
-    func openSettings() {}
-    func petClicked() {}
+    func requestVocabularyNow() { requestedWords += 1 }
+    func openSettings() { settingsRequests += 1 }
+    func togglePetWalking() { petWalkingPaused.toggle() }
+    func petClicked() { petClicks += 1 }
 }

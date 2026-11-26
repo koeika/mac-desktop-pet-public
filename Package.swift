@@ -8,6 +8,7 @@ let package = Package(
     ],
     products: [
         .library(name: "CodexPetCore", targets: ["CodexPetCore"]),
+        .executable(name: "PetPetKnows", targets: ["CodexPetApp"]),
         .executable(name: "whiskycolin", targets: ["CodexPetApp"]),
         .executable(name: "CodexPetApp", targets: ["CodexPetApp"]),
         .executable(name: "petctl", targets: ["PetCTL"]),

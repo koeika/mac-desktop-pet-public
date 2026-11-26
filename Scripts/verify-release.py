@@ -35,7 +35,7 @@ def verify(archive, version):
         roots = {PurePosixPath(name).parts[0] for name in members}
         assert len(roots) == 1, "Expected one release directory"
         root = next(iter(roots))
-        assert root == f"whiskycolin-v{version}-macos-arm64", "Directory/version mismatch"
+        assert root == f"PetPetKnows-v{version}-macos-arm64", "Directory/version mismatch"
         for item in files:
             name = PurePosixPath(decoded_name(item))
             assert not name.is_absolute() and ".." not in name.parts, "Unsafe archive entry"
@@ -46,10 +46,13 @@ def verify(archive, version):
         def read(relative):
             return package.read(members[f"{root}/{relative}"])
 
-        app = "Whisky&Cling.app/Contents"
+        app = "PetPetKnows.app/Contents"
         info = plistlib.loads(read(f"{app}/Info.plist"))
+        assert info["CFBundleName"] == info["CFBundleDisplayName"] == "PetPetKnows", "App brand mismatch"
+        assert info["CFBundleIdentifier"] == "app.whiskycolin.desktop-pet", "Existing app identity must be preserved"
+        assert info["CFBundleExecutable"] == "PetPetKnows", "Executable mismatch"
         assert info["CFBundleShortVersionString"] == version, "App version mismatch"
-        binary = read(f"{app}/MacOS/whiskycolin")
+        binary = read(f"{app}/MacOS/PetPetKnows")
         assert binary[:4] == b"\xcf\xfa\xed\xfe" and struct.unpack_from("<I", binary, 4)[0] == 0x0100000C, "Expected arm64 Mach-O"
         resources = f"{app}/Resources/CodexDesktopPet_CodexPetApp.bundle"
         for pet in sorted(pets):
@@ -64,11 +67,20 @@ def verify(archive, version):
         dictionary = json.loads(dictionary_bytes)
         assert dictionary["name"] == "雅思高频单词" and len(dictionary["entries"]) == 3674, "Vocabulary count mismatch"
         assert all(e.get("term") and e.get("meaning") and e.get("phonetic") for e in dictionary["entries"]), "Incomplete vocabulary fields"
-        assert read(f"{resources}/Themes/storybook-duo.png") == (repo / "Sources/CodexPetApp/Resources/Themes/storybook-duo.png").read_bytes(), "Missing theme artwork"
+        for artwork in ("storybook-duo", "forest-clearing", "forest-ferns"):
+            relative = f"Themes/{artwork}.png"
+            assert read(f"{resources}/{relative}") == (repo / "Sources/CodexPetApp/Resources" / relative).read_bytes(), f"Missing or stale theme artwork: {artwork}"
         for base in ("ChromeExtension", f"{app}/Resources/ChromeExtension"):
-            assert json.loads(read(f"{base}/manifest.json"))["version"] == version, "Extension version mismatch"
+            extension = json.loads(read(f"{base}/manifest.json"))
+            assert extension["version"] == version, "Extension version mismatch"
+            assert extension["name"] == "PetPetKnows 生词收藏", "Extension brand mismatch"
             for name in ("manifest.json", "content.js", "capture.html", "capture.js", "client.js", "parse.js", "style.css", "background.js", "icon.png"):
                 assert read(f"{base}/{name}") == (repo / "ChromeExtension" / name).read_bytes(), f"Stale extension: {name}"
+            for size in (16, 32, 48, 128):
+                name = f"icons/reading-cat-{size}.png"
+                assert extension["icons"][str(size)] == name, "Missing extension icon declaration"
+                assert extension["action"]["default_icon"][str(size)] == name, "Missing toolbar icon declaration"
+                assert read(f"{base}/{name}") == (repo / "ChromeExtension" / name).read_bytes(), f"Missing or stale icon: {name}"
         for name in ("bin/petctl", "Scripts/install-codex-skill.sh", "skills/codex-desktop-pet/SKILL.md", "README.md", "INSTALL.md"):
             assert read(name), f"Missing release file: {name}"
         notices = (repo / "THIRD_PARTY_NOTICES.md").read_bytes()
@@ -78,7 +90,8 @@ def verify(archive, version):
         assert upstream_license in notices.decode(), "Incomplete swift-fsrs MIT notice"
     return {"version": version, "platform": "macOS 14+ arm64", "pets": sorted(pets),
             "dictionary": dictionary["name"], "wordCount": len(dictionary["entries"]),
-            "extensionVersion": version, "privacyScan": "passed", "personalDataIncluded": False,
+            "extensionVersion": version, "themes": ["comic", "storybook", "forest"],
+            "privacyScan": "passed", "personalDataIncluded": False,
             "sha256": hashlib.sha256(Path(archive).read_bytes()).hexdigest(), "signing": "ad-hoc, not notarized"}
 
 
