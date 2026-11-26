@@ -63,6 +63,7 @@ final class NotebookTests: XCTestCase {
 private final class FeedbackSpy: PetContentViewDelegate {
     var reveals = 0
     var unknowns = 0
+    var petWalkingPaused = false
     func markKnown() {}
     func markUnknown() { unknowns += 1 }
     func markHard() {}
@@ -71,4 +72,5 @@ private final class FeedbackSpy: PetContentViewDelegate {
     func requestVocabularyNow() {}
     func openSettings() {}
     func petClicked() {}
+    func togglePetWalking() { petWalkingPaused.toggle() }
 }
