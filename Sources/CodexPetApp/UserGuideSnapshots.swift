@@ -49,6 +49,11 @@ enum UserGuideSnapshots {
         }
         _ = try store.captureWord(capture)
         store.settings.enabledDictionaryIDs.formUnion([japanese.id, work.id])
+        let studyTime = Date()
+        for (pack, entry, action) in [(japanese, japanese.entries[0], WordAction.unknown), (work, work.entries[0], .known)] {
+            try store.reviewWord(ScopedDictionaryEntry(dictionaryID: pack.id, dictionaryName: pack.name, entry: entry),
+                action: action, now: studyTime.addingTimeInterval(-3600))
+        }
         store.settings.walkingPaused = true
         store.settings.movementSpeedMultiplier = 0.1
         store.settings.serverPort = 4794
@@ -81,6 +86,10 @@ enum UserGuideSnapshots {
         try await captureView(SettingsCenterView(store: store, actions: actions, initialTab: .progress), name: "guide-progress", output: output)
         try await captureView(SettingsCenterView(store: store, actions: actions, initialTab: .appearance), name: "guide-themes", output: output)
         if ProcessInfo.processInfo.environment["PETPETKNOWS_COMPACT_SNAPSHOTS"] == "1" {
+            try await captureView(SettingsCenterView(store: store, actions: actions, initialTab: .plan),
+                name: "compact-learning-plan", output: output, size: NSSize(width: 880, height: 620))
+            try await captureView(SettingsCenterView(store: store, actions: actions, initialTab: .library),
+                name: "compact-dictionary-library", output: output, size: NSSize(width: 880, height: 620))
             for tab in SettingsTab.allCases {
                 try await captureView(SettingsCenterView(store: store, actions: actions, initialTab: tab),
                     name: "compact-\(tab)", output: output, size: NSSize(width: 880, height: 620))

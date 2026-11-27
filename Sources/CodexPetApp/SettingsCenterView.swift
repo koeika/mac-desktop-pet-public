@@ -14,6 +14,7 @@ struct SettingsActions {
     var sendTestProgress: () -> Void
     var chooseSyncFolder: () -> Void
     var watchLogFile: () -> Void
+    var studyNow: () -> Void = {}
 }
 
 final class SettingsWindowController {
@@ -881,8 +882,14 @@ struct DictionaryTab: View {
                 default:
                     ScrollView {
                         VStack(alignment: .leading, spacing: 20) {
-                            learningPacePanel
-                            reviewPlanPanel
+                            LearningPlanPanel(store: store, index: index, studyNow: actions.studyNow)
+                            Divider()
+                            DisclosureGroup("学习节奏与复习设置") {
+                                VStack(alignment: .leading, spacing: 20) {
+                                    learningPacePanel
+                                    reviewPlanPanel
+                                }.padding(.top, 16)
+                            }
                         }.frame(maxWidth: .infinity, alignment: .leading).padding(.trailing, 4)
                     }.scrollIndicators(.visible)
                 }
@@ -981,12 +988,8 @@ struct DictionaryTab: View {
                     store.objectWillChange.send(); store.settings.vocabularyRetention = $0; store.saveSettings()
                 }), in: 0.8...0.95, step: 0.01).frame(maxWidth: 220)
             }
-            Divider()
-            Text("个人生词学习来源").font(.headline)
-            ForEach(index.personalSources, id: \.self) { id in
-                Toggle(id == "personal-en" ? "英语生词" : id == "personal-ja" ? "日语生词" : "其他生词", isOn: Binding(get: { store.settings.enabledDictionaryIDs.contains(id) },
-                    set: { store.toggleDictionary(id, isEnabled: $0) })).toggleStyle(.checkbox)
-            }
+            Text("目标保持率用于 FSRS 安排复习，不是已测得的掌握率；设置越高，通常需要越频繁地复习。")
+                .font(.caption).foregroundStyle(.secondary)
         }.padding(.vertical, 8)
     }
 
@@ -1428,7 +1431,7 @@ struct DictionaryCard: View {
                         .fixedSize(horizontal: false, vertical: true)
                         .frame(maxWidth: .infinity, minHeight: 38, maxHeight: 38, alignment: .topLeading)
                         .help(summary.pack.name)
-                    Text("\(summary.pack.entries.count) 个词")
+                    Text("\(summary.studyProgress.total) 个词")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -1458,13 +1461,16 @@ struct DictionaryCard: View {
             Text(visibleDescription)
                 .font(.caption)
                 .foregroundStyle(.secondary)
-                .lineLimit(2)
-                .frame(maxWidth: .infinity, minHeight: 32, maxHeight: 32, alignment: .topLeading)
-            HStack(spacing: 8) {
-                StatPill(label: "已学", value: summary.learnedCount, color: .green)
-                StatPill(label: "待加强", value: summary.unknownCount, color: .orange)
-                StatPill(label: "跳过", value: summary.skippedCount, color: .secondary)
-            }.frame(height: 48)
+                .lineLimit(1)
+                .frame(maxWidth: .infinity, minHeight: 16, maxHeight: 16, alignment: .topLeading)
+                .help(visibleDescription)
+            DictionaryStudyProgressView(progress: summary.studyProgress)
+            HStack(spacing: 10) {
+                Text("已认识 \(summary.studyProgress.familiar)")
+                Text("学习中 \(summary.studyProgress.learning)")
+                Spacer(minLength: 0)
+                Text("待学习 \(summary.studyProgress.remaining)")
+            }.font(.caption2).foregroundStyle(.secondary).monospacedDigit()
             Spacer(minLength: 0)
             HStack {
                 if !summary.isBuiltIn {
@@ -1484,7 +1490,7 @@ struct DictionaryCard: View {
         }
         .padding(16)
         .frame(maxWidth: .infinity)
-        .frame(height: 272, alignment: .topLeading)
+        .frame(height: 256, alignment: .topLeading)
         .background(theme.paper, in: RoundedRectangle(cornerRadius: 7))
         .overlay(RoundedRectangle(cornerRadius: 7).stroke(theme.line))
         .sheet(isPresented: $isEditing) {

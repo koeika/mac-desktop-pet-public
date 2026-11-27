@@ -4,6 +4,10 @@ import CodexPetCore
 @testable import CodexPetApp
 
 final class NotebookTests: XCTestCase {
+    @MainActor func testLearningPlanProgressSourcesAndPersistence() async throws {
+        _ = NSApplication.shared
+        try await LearningPlanRegression.run()
+    }
     @MainActor func testVocabularyOnlyPetVisibilityAndPreferencePersistence() async throws {
         _ = NSApplication.shared
         try await PetVisibilityRegression.run()

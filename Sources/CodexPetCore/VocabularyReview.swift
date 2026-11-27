@@ -37,6 +37,10 @@ public enum VocabularyReviewScheduler {
 
     public static func next(_ stat: WordStat?, action: WordAction, now: Date, retention: Double = 0.9) throws -> WordStat {
         var updated = stat ?? WordStat()
+        if updated.review == nil, action != .skipped {
+            updated.firstReviewWasNew = !(updated.learned || updated.unknownCount > 0
+                || [.known, .unknown, .hard].contains(updated.lastAction))
+        }
         if updated.review == nil, updated.learned, updated.legacyDueAt == nil {
             updated.legacyDueAt = dueDate(updated, now: now)
         }

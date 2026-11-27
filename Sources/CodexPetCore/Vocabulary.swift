@@ -97,6 +97,7 @@ public struct WordStat: Codable, Equatable {
     public var postponedUntil: Date?
     public var legacyDueAt: Date?
     public var review: ScheduledReview?
+    public var firstReviewWasNew: Bool?
 
     public init(
         learned: Bool = false,
@@ -137,6 +138,19 @@ public struct WordStat: Codable, Equatable {
         result.postponedUntil = latest.postponedUntil
         result.legacyDueAt = latest.legacyDueAt
         result.review = ScheduledReview.merge(review, other.review)
+        // Provenance belongs to the earliest review. Preserve legacy evidence
+        // conservatively so a later sync cannot turn a reviewed word into new.
+        let copies = [self, other]
+        let hasLegacyFeedback = copies.contains {
+            ($0.review?.events.isEmpty ?? true) && ($0.learned || $0.unknownCount > 0
+                || [.known, .unknown, .hard].contains($0.lastAction))
+        }
+        if hasLegacyFeedback || copies.contains(where: { $0.firstReviewWasNew == false }) {
+            result.firstReviewWasNew = false
+        } else if let first = result.review?.events.first {
+            let earliest = copies.filter { $0.review?.events.contains(where: { $0.id == first.id }) == true }
+            result.firstReviewWasNew = earliest.contains(where: { $0.firstReviewWasNew == true }) ? true : nil
+        }
         return result
     }
 }

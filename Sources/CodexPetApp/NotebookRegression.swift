@@ -73,6 +73,7 @@ enum NotebookRegression {
     }
 
     @MainActor static func run() async throws {
+        try await LearningPlanRegression.run()
         precondition(AppBrand.displayName == "PetPetKnows")
         try SettingsRedesignRegression.run()
         try await PetVisibilityRegression.run()

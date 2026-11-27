@@ -108,6 +108,8 @@ struct DictionaryLibraryQuery: Equatable {
     private(set) var categories: [String] = []
     private(set) var dueWords = 0
     private(set) var personalSources: [String] = []
+    private(set) var learningDictionaries: [DictionarySummary] = []
+    private(set) var studyProgress = VocabularyStudyProgress()
     private var request = 0
 
     func reload(store: AppDataStore, now: Date, beforePublishing: (() async -> Void)? = nil) async {
@@ -115,16 +117,21 @@ struct DictionaryLibraryQuery: Equatable {
         let currentRequest = request
         let words = store.personalVocabulary.words
         let packs = store.dictionaries
+        let personalPacks = store.personalVocabulary.packs
         let stats = store.vocabularyProgress.stats
         let enabled = store.settings.enabledDictionaryIDs
+        let introduced = store.settings.vocabularyShownCountDate == VocabularyDisplayScheduler.todayKey(for: now)
+            ? Set(store.settings.newVocabularyKeys) : []
         guard let result = try? await libraryBackground({
             let rows = try words.map { word in
                 try Task.checkCancellation()
                 return NotebookRow(word: word, stat: stats[word.statKey], now: now)
             }
-            let summaries = AppDataStore.dictionarySummaries(packs: packs, stats: stats, enabledIDs: enabled, isCancelled: { Task.isCancelled })
+            let summaries = AppDataStore.dictionarySummaries(packs: packs, stats: stats, enabledIDs: enabled, now: now, isCancelled: { Task.isCancelled })
+            let personal = AppDataStore.dictionarySummaries(packs: personalPacks, stats: stats, enabledIDs: enabled, now: now, isCancelled: { Task.isCancelled })
+            let progress = VocabularyStudyProgress(entries: VocabularyPicker.scopedEntries(from: packs + personalPacks, enabledIDs: enabled), stats: stats, now: now, introducedKeys: introduced)
             let categories = Set(summaries.map { $0.category ?? "未分类" }).sorted { $0.localizedStandardCompare($1) == .orderedAscending }
-            return (rows, summaries, categories, rows.filter { $0.due.map { $0 <= now } == true }.count)
+            return (rows, summaries, categories, rows.filter { $0.due.map { $0 <= now } == true }.count, personal, progress)
         }) else { return }
         // Tests can hold a completed old snapshot while a newer refresh publishes.
         await beforePublishing?()
@@ -134,6 +141,8 @@ struct DictionaryLibraryQuery: Equatable {
         categories = result.2
         dueWords = result.3
         personalSources = Set(result.0.map { $0.word.dictionaryID }).sorted()
+        learningDictionaries = result.1 + result.4
+        studyProgress = result.5
         generation &+= 1
     }
 }

@@ -25,7 +25,14 @@ func XCTAssertThrowsError<T>(_ expression: @autoclosure () throws -> T) {
         try tests.testCaptureRoundTripDedupAndContexts()
         try tests.testDuePriorityNewQuotaFreshnessAndCooldown()
         try tests.testLegacyStatDecodesWithoutFabricatedHistoryAndSeenIsNotFeedback()
+        let progress = VocabularyStudyProgressTests()
+        try progress.testExposureSkipAndDuplicateDoNotInflateStudyProgress()
+        try progress.testDailyCountsAreDistinctLocalCalendarFeedbackNotExposures()
+        try progress.testDictionaryIsolationLegacyTotalsAndDueBoundary()
+        try progress.testPendingFeedbackMatchesQueueAfterNewQuotaIsExhausted()
+        try progress.testLegacyFeedbackIsNotReclassifiedAsFirstLearning()
+        try progress.testSyncProvenanceFollowsEarliestEvidence()
         try await CaptureHTTPTests().testAuthenticatedCapturePersistsAndRejectsInvalidWrites()
-        print("core-regression: 6 cases passed (FSRS, sync, capture, queue, migration, real HTTP)")
+        print("core-regression: 12 cases passed (FSRS, sync, capture, queue, migration, study progress, real HTTP)")
     }
 }

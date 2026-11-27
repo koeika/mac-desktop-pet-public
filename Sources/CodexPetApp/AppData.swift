@@ -277,6 +277,7 @@ struct DictionarySummary: Identifiable {
     var learnedCount: Int
     var unknownCount: Int
     var skippedCount: Int
+    var studyProgress = VocabularyStudyProgress()
 }
 
 final class AppDataStore: ObservableObject {
@@ -1162,7 +1163,7 @@ final class AppDataStore: ObservableObject {
             phase = "进行中"
         }
         let total = settings.dailyVocabularyUnlimited ? "不限量" : String(snapshot.dailyLimit)
-        return "学习时段 \(VocabularyDisplayScheduler.timeText(for: snapshot.studyStartMinute))-\(VocabularyDisplayScheduler.timeText(for: snapshot.studyEndMinute)) · \(phase) · 今日 \(snapshot.shownCount)/\(total)"
+        return "学习时段 \(VocabularyDisplayScheduler.timeText(for: snapshot.studyStartMinute))-\(VocabularyDisplayScheduler.timeText(for: snapshot.studyEndMinute)) · \(phase) · 自动已展示 \(snapshot.shownCount)/\(total)"
     }
 
     func toggleDictionary(_ dictionaryID: String, isEnabled: Bool) {
@@ -1186,7 +1187,7 @@ final class AppDataStore: ObservableObject {
         Self.dictionarySummaries(packs: dictionaries, stats: vocabularyProgress.stats, enabledIDs: settings.enabledDictionaryIDs)
     }
 
-    static func dictionarySummaries(packs: [DictionaryPack], stats: [String: WordStat], enabledIDs: Set<String>, isCancelled: () -> Bool = { false }) -> [DictionarySummary] {
+    static func dictionarySummaries(packs: [DictionaryPack], stats: [String: WordStat], enabledIDs: Set<String>, now: Date = Date(), isCancelled: () -> Bool = { false }) -> [DictionarySummary] {
         packs.compactMap { pack in
             guard !isCancelled() else { return nil }
             var learned = 0
@@ -1207,7 +1208,10 @@ final class AppDataStore: ObservableObject {
                 category: dictionaryCategory(for: pack),
                 learnedCount: learned,
                 unknownCount: unknown,
-                skippedCount: skipped
+                skippedCount: skipped,
+                studyProgress: VocabularyStudyProgress(entries: pack.entries.map {
+                    ScopedDictionaryEntry(dictionaryID: pack.id, dictionaryName: pack.name, entry: $0)
+                }, stats: stats, now: now)
             )
         }
     }

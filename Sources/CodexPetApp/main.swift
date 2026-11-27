@@ -404,9 +404,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, PetContentViewDelegate
 
 
     private func vocabularyFooterText() -> String {
-        let limit = max(1, store.settings.dailyVocabularyLimit)
-        let shown = min(max(0, store.settings.vocabularyShownCount), limit)
-        return "今日 \(shown) / \(limit)"
+        guard let word = activeWord else { return "" }
+        let pack = (store.dictionaries + store.personalVocabulary.packs).first { $0.id == word.dictionaryID }
+        let entries = (pack?.entries ?? []).map {
+            ScopedDictionaryEntry(dictionaryID: word.dictionaryID, dictionaryName: word.dictionaryName, entry: $0)
+        }
+        let progress = VocabularyStudyProgress(entries: entries, stats: store.vocabularyProgress.stats)
+        return "本词典已学 \(progress.studied)/\(progress.total) · 今日反馈 \(progress.answeredToday) 词"
     }
 
     private func scheduleNextAutomaticVocabulary(after date: Date) {
@@ -574,7 +578,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, PetContentViewDelegate
                     showImportFormat: { [weak self] in self?.showImportFormat() },
                     sendTestProgress: { [weak self] in self?.sendTestProgress() },
                     chooseSyncFolder: { [weak self] in self?.chooseSyncFolder() },
-                    watchLogFile: { [weak self] in self?.watchLogFile() }
+                    watchLogFile: { [weak self] in self?.watchLogFile() },
+                    studyNow: { [weak self] in self?.requestVocabularyNow() }
                 )
             )
         }
@@ -777,6 +782,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, PetContentViewDelegate
 }
 
 let app = NSApplication.shared
+if CommandLine.arguments.contains("--self-test-learning-plan") {
+    Task { @MainActor in
+        do { try await LearningPlanRegression.run(); exit(0) }
+        catch { fputs("learning-plan-regression failed: \(error)\n", stderr); exit(1) }
+    }
+    app.run()
+    exit(1)
+}
 if CommandLine.arguments.contains("--export-user-guide") {
     Task { @MainActor in
         do { try await UserGuideSnapshots.run(); exit(0) }
