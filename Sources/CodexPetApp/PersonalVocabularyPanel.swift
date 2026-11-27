@@ -150,7 +150,7 @@ struct PersonalVocabularyPanel: View {
 
     private var statusFilter: some View {
         Picker("学习状态", selection: $query.state) {
-            ForEach(["全部", "新收藏", "待加强", "到期复习", "已掌握"], id: \.self) { Text($0).tag($0) }
+            ForEach(["全部", "新收藏", "学习中", "待加强", "到期复习", "稳定记忆", "历史待核实"], id: \.self) { Text($0).tag($0) }
         }.frame(maxWidth: 230)
     }
     private var languageFilter: some View {
@@ -214,6 +214,13 @@ struct NotebookWordDetail: View {
                             }
                         }.padding(.top, 10)
                     }.font(.caption)
+                    let memory = VocabularyMemoryAssessment(stat: store.vocabularyProgress.stats[word.statKey], retention: store.settings.vocabularyRetention)
+                    if let probability = memory.recallProbability {
+                        VStack(alignment: .leading, spacing: 5) {
+                            Text(memory.isStable ? "稳定记忆（估计）" : "学习中 · 尚未达到稳定记忆标准")
+                            Text("预计当前可回忆 \(Int((probability * 100).rounded()))% · 有效间隔认识 \(memory.spacedSuccesses) 次")
+                        }.font(.caption).foregroundStyle(.secondary)
+                    }
                     DisclosureGroup("最近学习记录") {
                         let events = store.vocabularyProgress.stats[word.statKey]?.review?.events ?? []
                         VStack(alignment: .leading, spacing: 8) {

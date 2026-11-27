@@ -5,6 +5,27 @@ import XCTest
 @testable import CodexPetCore
 
 final class VocabularyStudyProgressTests: XCTestCase {
+    func testLegacyAggregateFlagsCannotInflateConfirmedProgress() throws {
+        var entries: [ScopedDictionaryEntry] = []
+        var stats: [String: WordStat] = [:]
+        for index in 0..<720 {
+            let word = entry("fixture-\(index)")
+            entries.append(word)
+            if index < 655 {
+                stats[word.statKey] = WordStat(learned: index < 468, unknownCount: index < 468 ? 0 : 1,
+                    seenCount: 2, lastAction: index < 468 ? .known : .unknown, updatedAt: now.addingTimeInterval(-86400))
+            } else {
+                stats[word.statKey] = try VocabularyReviewScheduler.next(nil,
+                    action: index < 715 ? .known : .unknown, now: now)
+            }
+        }
+        let result = VocabularyStudyProgress(entries: entries, stats: stats, now: now)
+        XCTAssertEqual(result.studied, 65)
+        XCTAssertEqual(result.familiar, 60)
+        XCTAssertEqual(result.learning, 65)
+        XCTAssertEqual(result.mastered, 0)
+        XCTAssertEqual(result.legacyUnverified, 655)
+    }
     private var calendar: Calendar {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(secondsFromGMT: 8 * 3600)!
@@ -27,11 +48,41 @@ final class VocabularyStudyProgressTests: XCTestCase {
         XCTAssertEqual(result.total, 6)
         XCTAssertEqual(result.studied, 3)
         XCTAssertEqual(result.familiar, 1)
-        XCTAssertEqual(result.learning, 2)
+        XCTAssertEqual(result.learning, 3)
         XCTAssertEqual(result.seenOnly, 1)
         XCTAssertEqual(result.remaining, 3)
-        XCTAssertEqual(result.fraction, 0.5)
+        XCTAssertEqual(result.fraction, 0)
+        XCTAssertEqual(result.coverageFraction, 0.5)
         XCTAssertEqual(result.answeredToday, 3)
+    }
+
+    func testOnlyDatedFeedbackCountsAndLatestAnswerWins() throws {
+        let real = try VocabularyReviewScheduler.next(nil, action: .unknown, now: now)
+        var stale = real
+        stale.learned = true
+        stale.lastAction = .known
+        var future = try VocabularyReviewScheduler.next(nil, action: .known, now: now.addingTimeInterval(86400))
+        future.lastFeedbackAt = now
+        var skipOnly = real
+        skipOnly.review!.events[0].action = .skipped
+        skipOnly.learned = false
+        skipOnly.lastAction = .skipped
+        skipOnly.unknownCount = 0
+        let entries = [entry("stale"), entry("future"), entry("skip-event")]
+        let stats = [entries[0].statKey: stale, entries[1].statKey: future, entries[2].statKey: skipOnly]
+        let bytes = try JSONFileStore.encoder.encode(VocabularyProgress(stats: stats))
+        let result = VocabularyStudyProgress(entries: entries, stats: stats, now: now, calendar: calendar)
+        XCTAssertEqual(result.studied, 1)
+        XCTAssertEqual(result.familiar, 0)
+        XCTAssertEqual(result.answeredToday, 1)
+        let unchanged = try JSONFileStore.encoder.encode(VocabularyProgress(stats: stats))
+        XCTAssertEqual(unchanged, bytes)
+        let repeated = try VocabularyReviewScheduler.next(real, action: .known, now: now.addingTimeInterval(60))
+        let after = VocabularyStudyProgress(entries: [entry("stale")], stats: [entry("stale").statKey: repeated], now: now.addingTimeInterval(60))
+        XCTAssertEqual(after.studied, 1)
+        XCTAssertEqual(after.familiar, 1)
+        XCTAssertEqual(after.fraction, 0)
+        XCTAssertEqual(after.coverageFraction, 1)
     }
 
     func testDailyCountsAreDistinctLocalCalendarFeedbackNotExposures() throws {
@@ -59,7 +110,8 @@ final class VocabularyStudyProgressTests: XCTestCase {
         let entries = [entry("legacy"), entry("scheduled"), entry("scheduled", dictionaryID: "other")]
         let stats = [entry("legacy").statKey: known, entry("scheduled").statKey: scheduled]
         let initial = VocabularyStudyProgress(entries: entries, stats: stats, now: now, calendar: calendar)
-        XCTAssertEqual(initial.studied, 2)
+        XCTAssertEqual(initial.studied, 1)
+        XCTAssertEqual(initial.legacyUnverified, 1)
         XCTAssertEqual(initial.answeredToday, 1)
         XCTAssertEqual(initial.due, 0)
         XCTAssertEqual(initial.nextReview, scheduled.review!.card.due)

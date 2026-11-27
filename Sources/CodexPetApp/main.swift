@@ -3,6 +3,7 @@ import CodexPetCore
 import UniformTypeIdentifiers
 
 final class AppDelegate: NSObject, NSApplicationDelegate, PetContentViewDelegate, NSMenuDelegate {
+    private var progressAccessLock: LearningProgressLock?
     private var store: AppDataStore!
     private var window: NSPanel!
     private var contentView: PetContentView!
@@ -34,12 +35,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, PetContentViewDelegate
         NSApplication.shared.setActivationPolicy(.regular)
         do {
             let testRoot = ProcessInfo.processInfo.environment["WHISKYCLING_DATA_DIR"].map { URL(fileURLWithPath: $0) }
-            store = try AppDataStore(root: testRoot)
+            let dataRoot = try testRoot ?? JSONFileStore.applicationSupportDirectory()
+            progressAccessLock = try LearningProgressLock(root: dataRoot)
+            store = try AppDataStore(root: dataRoot)
             if let port = ProcessInfo.processInfo.environment["WHISKYCLING_PORT"].flatMap(UInt16.init) {
                 store.settings.serverPort = port
             }
         } catch {
-            fatalError("Cannot initialize app store: \(error)")
+            let alert = NSAlert()
+            alert.messageText = "无法打开学习数据"
+            alert.informativeText = error.localizedDescription
+            alert.runModal()
+            NSApp.terminate(nil)
+            return
         }
 
         setupWindow()
@@ -56,8 +64,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, PetContentViewDelegate
     }
 
     func applicationWillTerminate(_ notification: Notification) {
-        store.settings.lastWindowOrigin = window.frame.origin
-        store.saveSettings()
+        if let store, let window {
+            store.settings.lastWindowOrigin = window.frame.origin
+            store.saveSettings()
+        }
         httpServer?.stop()
         logWatcher.stop()
     }
@@ -409,8 +419,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, PetContentViewDelegate
         let entries = (pack?.entries ?? []).map {
             ScopedDictionaryEntry(dictionaryID: word.dictionaryID, dictionaryName: word.dictionaryName, entry: $0)
         }
-        let progress = VocabularyStudyProgress(entries: entries, stats: store.vocabularyProgress.stats)
-        return "本词典已学 \(progress.studied)/\(progress.total) · 今日反馈 \(progress.answeredToday) 词"
+        let progress = VocabularyStudyProgress(entries: entries, stats: store.vocabularyProgress.stats, retention: store.settings.vocabularyRetention)
+        return "稳定记忆 \(progress.mastered)/\(progress.total) · 已反馈 \(progress.studied) 词"
     }
 
     private func scheduleNextAutomaticVocabulary(after date: Date) {
@@ -782,6 +792,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, PetContentViewDelegate
 }
 
 let app = NSApplication.shared
+if CommandLine.arguments.contains("--clean-unmarked-progress") {
+    do {
+        guard NSRunningApplication.runningApplications(withBundleIdentifier: "app.whiskycolin.desktop-pet")
+            .allSatisfy({ $0.processIdentifier == ProcessInfo.processInfo.processIdentifier }) else {
+            throw NSError(domain: "LearningProgressCleanup", code: 3,
+                userInfo: [NSLocalizedDescriptionKey: "请先退出 Applications 中的桌宠，再执行清理。"])
+        }
+        let root = ProcessInfo.processInfo.environment["WHISKYCLING_DATA_DIR"].map { URL(fileURLWithPath: $0) }
+        let store = try AppDataStore(root: root)
+        let removed = try store.cleanUnmarkedLearningProgress()
+        print("progress-cleanup: removed \(removed) unmarked exposure records; dictionaries and marked learning records retained")
+        exit(0)
+    } catch { fputs("progress-cleanup failed: \(error)\n", stderr); exit(1) }
+}
 if CommandLine.arguments.contains("--self-test-learning-plan") {
     Task { @MainActor in
         do { try await LearningPlanRegression.run(); exit(0) }

@@ -28,7 +28,8 @@ enum LibraryBrowserRegression {
         let rows = words.map { NotebookRow(word: $0, stat: stats[$0.statKey], now: now) }
         precondition(rows.count == 10_000)
         precondition(NotebookQuery(state: "新收藏").apply(to: rows, now: now).count == 6000)
-        precondition(NotebookQuery(state: "已掌握").apply(to: rows, now: now).count == 2000)
+        precondition(NotebookQuery(state: "稳定记忆").apply(to: rows, now: now).isEmpty)
+        precondition(NotebookQuery(state: "历史待核实").apply(to: rows, now: now).count == 4000)
         precondition(NotebookQuery(state: "到期复习").apply(to: rows, now: now).count == 2000)
         precondition(NotebookQuery(language: "ja").apply(to: rows, now: now).count == 5000)
         precondition(NotebookQuery(source: "有网页来源").apply(to: rows, now: now).count == 2500)
@@ -36,7 +37,7 @@ enum LibraryBrowserRegression {
         precondition(NotebookQuery(search: "Source 9999").apply(to: rows, now: now).count == 1)
         precondition(NotebookQuery(search: "/fixture/").apply(to: rows, now: now).count == 10_000)
         precondition(NotebookQuery(search: "nonexistent").apply(to: rows, now: now).isEmpty)
-        precondition(NotebookQuery(state: "已掌握", language: "ja", source: "有网页来源").apply(to: rows, now: now).isEmpty)
+        precondition(NotebookQuery(state: "稳定记忆", language: "ja", source: "有网页来源").apply(to: rows, now: now).isEmpty)
         let sorted = NotebookQuery(sort: "单词 A-Z").apply(to: rows, now: now)
         precondition(sorted.first?.word.content.term == "fixture00000" && sorted.last?.word.content.term == "fixture09999")
         let second = LibraryPage(count: sorted.count, size: 20, requested: 2)

@@ -53,7 +53,8 @@ struct LearningPlanPanel: View {
             Text(store.settings.vocabularyRecallMode ? "先回忆，再查看释义，最后按实际记忆程度反馈。" : "当前直接展示释义；反馈仍参与下次复习安排。")
             Text("到期词优先；每 4 次自动展示预留 1 次新词机会，新词名额用完后只复习。新收藏优先于词典中的普通新词；同一词两次展示至少间隔 10 分钟。")
             Text("不认识 / 有点印象 / 认识啦分别参与 FSRS 计算，下次时间以词卡按钮提示为准；稍后再看延后一天，不算完成学习。")
-            Text("已学表示至少完成一次反馈，不代表永久掌握；已认识表示最近一次反馈为认识。旧版没有逐次记录的学习，只计累计进度，不补造历史。")
+            Text("稳定记忆是保守估计：至少 3 次相隔 24 小时且到期的认识反馈、跨度至少 7 天，FSRS 稳定度至少 7 天，当前未到期且预计可回忆率达到目标。不是永久掌握；遗忘、费力回忆、逾期或概率下降后会退回学习中。")
+            Text("已反馈只计有逐次记录的词条。仅展示、跳过和无法核实的旧标记不计入稳定记忆；历史标记保留，重新反馈后再积累间隔复习证据。")
                 .foregroundStyle(.secondary)
         }.font(.callout).fixedSize(horizontal: false, vertical: true)
     }
@@ -78,9 +79,14 @@ struct LearningPlanPanel: View {
                 Text("另有 \(index.studyProgress.pendingFeedback) 个已出题但未完成反馈的词，仍会进入学习队列。")
                     .font(.callout)
             }
+            if index.studyProgress.legacyUnverified > 0 {
+                Text("历史记录待核实 \(index.studyProgress.legacyUnverified) 个，其中到期待处理 \(index.studyProgress.legacyDue) 个；重新反馈后才计入有效反馈进度。")
+                    .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            }
             if index.studyProgress.total == 0 {
                 Text("尚未选择学习来源。在下方启用词典或生词本。")
-            } else if index.studyProgress.due == 0, let next = index.studyProgress.nextReview {
+            } else if index.studyProgress.due == 0, index.studyProgress.legacyDue == 0,
+                      index.studyProgress.pendingFeedback == 0, let next = index.studyProgress.nextReview {
                 Text("当前没有到期复习，下次到期：\(next.formatted(date: .abbreviated, time: .shortened))。")
             }
             Text("新词名额按自动首次展示计，不等于完成数；手动学习不受时段和自动上限限制。未反馈的词仍待学习，自动弹出也不会替你完成任务。")
@@ -133,12 +139,12 @@ struct DictionaryStudyProgressView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
-                Text("已学 \(progress.studied) / \(progress.total)")
+                Text("稳定记忆 \(progress.mastered) / \(progress.total)")
                 Spacer()
                 Text(progress.fraction, format: .percent.precision(.fractionLength(0)))
             }.font(.caption).monospacedDigit()
-            ProgressView(value: progress.fraction).accessibilityLabel("词典学习进度")
+            ProgressView(value: progress.fraction).accessibilityLabel("词典稳定记忆进度")
         }
-        .help("按已完成学习反馈的不同词条计数；重复展示不增加进度，已学不等于永久掌握。")
+        .help("至少3次到期且相隔24小时的认识反馈，跨度和FSRS稳定度均不少于7天；当前未到期且预计可回忆率达到目标。仅为模型估计，非永久掌握。")
     }
 }

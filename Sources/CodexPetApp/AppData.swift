@@ -292,7 +292,10 @@ final class AppDataStore: ObservableObject {
     let objectWillChange = ObservableObjectPublisher()
     private(set) var libraryRevision = 0
     var settings: AppSettings {
-        didSet { if oldValue.enabledDictionaryIDs != settings.enabledDictionaryIDs { libraryRevision &+= 1 } }
+        didSet {
+            if oldValue.enabledDictionaryIDs != settings.enabledDictionaryIDs
+                || oldValue.vocabularyRetention != settings.vocabularyRetention { libraryRevision &+= 1 }
+        }
     }
     var pets: [PetAsset]
     var dictionaries: [DictionaryPack] { didSet { libraryRevision &+= 1 } }
@@ -1187,7 +1190,7 @@ final class AppDataStore: ObservableObject {
         Self.dictionarySummaries(packs: dictionaries, stats: vocabularyProgress.stats, enabledIDs: settings.enabledDictionaryIDs)
     }
 
-    static func dictionarySummaries(packs: [DictionaryPack], stats: [String: WordStat], enabledIDs: Set<String>, now: Date = Date(), isCancelled: () -> Bool = { false }) -> [DictionarySummary] {
+    static func dictionarySummaries(packs: [DictionaryPack], stats: [String: WordStat], enabledIDs: Set<String>, now: Date = Date(), retention: Double = 0.9, isCancelled: () -> Bool = { false }) -> [DictionarySummary] {
         packs.compactMap { pack in
             guard !isCancelled() else { return nil }
             var learned = 0
@@ -1211,7 +1214,7 @@ final class AppDataStore: ObservableObject {
                 skippedCount: skipped,
                 studyProgress: VocabularyStudyProgress(entries: pack.entries.map {
                     ScopedDictionaryEntry(dictionaryID: pack.id, dictionaryName: pack.name, entry: $0)
-                }, stats: stats, now: now)
+                }, stats: stats, now: now, retention: retention)
             )
         }
     }

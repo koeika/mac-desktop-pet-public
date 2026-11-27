@@ -33,10 +33,13 @@ struct NotebookRow: Identifiable {
     let due: Date?
     let searchable: String
 
-    init(word: CapturedWord, stat: WordStat?, now: Date) {
+    init(word: CapturedWord, stat: WordStat?, now: Date, retention: Double = 0.9) {
         self.word = word
-        state = stat?.learned == true ? "已掌握" :
-            (stat?.review != nil || stat?.lastAction == .unknown || stat?.lastAction == .hard ? "待加强" : "新收藏")
+        let memory = VocabularyMemoryAssessment(stat: stat, now: now, retention: retention)
+        if memory.isStable { state = "稳定记忆" }
+        else if let last = memory.events.last { state = last.action == .known ? "学习中" : "待加强" }
+        else if stat?.learned == true || stat?.unknownCount ?? 0 > 0 || stat?.lastAction != nil || stat?.review != nil { state = "历史待核实" }
+        else { state = "新收藏" }
         due = stat?.review != nil || stat?.lastAction != nil ? VocabularyReviewScheduler.dueDate(stat, now: now) : nil
         searchable = [word.content.term, word.content.meaning, word.content.phoneticUK ?? "",
                       word.content.phoneticUS ?? "", word.content.sourceTitle ?? ""].joined(separator: "\n")
@@ -120,16 +123,17 @@ struct DictionaryLibraryQuery: Equatable {
         let personalPacks = store.personalVocabulary.packs
         let stats = store.vocabularyProgress.stats
         let enabled = store.settings.enabledDictionaryIDs
+        let retention = store.settings.vocabularyRetention
         let introduced = store.settings.vocabularyShownCountDate == VocabularyDisplayScheduler.todayKey(for: now)
             ? Set(store.settings.newVocabularyKeys) : []
         guard let result = try? await libraryBackground({
             let rows = try words.map { word in
                 try Task.checkCancellation()
-                return NotebookRow(word: word, stat: stats[word.statKey], now: now)
+                return NotebookRow(word: word, stat: stats[word.statKey], now: now, retention: retention)
             }
-            let summaries = AppDataStore.dictionarySummaries(packs: packs, stats: stats, enabledIDs: enabled, now: now, isCancelled: { Task.isCancelled })
-            let personal = AppDataStore.dictionarySummaries(packs: personalPacks, stats: stats, enabledIDs: enabled, now: now, isCancelled: { Task.isCancelled })
-            let progress = VocabularyStudyProgress(entries: VocabularyPicker.scopedEntries(from: packs + personalPacks, enabledIDs: enabled), stats: stats, now: now, introducedKeys: introduced)
+            let summaries = AppDataStore.dictionarySummaries(packs: packs, stats: stats, enabledIDs: enabled, now: now, retention: retention, isCancelled: { Task.isCancelled })
+            let personal = AppDataStore.dictionarySummaries(packs: personalPacks, stats: stats, enabledIDs: enabled, now: now, retention: retention, isCancelled: { Task.isCancelled })
+            let progress = VocabularyStudyProgress(entries: VocabularyPicker.scopedEntries(from: packs + personalPacks, enabledIDs: enabled), stats: stats, now: now, introducedKeys: introduced, retention: retention)
             let categories = Set(summaries.map { $0.category ?? "未分类" }).sorted { $0.localizedStandardCompare($1) == .orderedAscending }
             return (rows, summaries, categories, rows.filter { $0.due.map { $0 <= now } == true }.count, personal, progress)
         }) else { return }

@@ -16,7 +16,7 @@ def verify(archive, version):
     repo = Path(__file__).resolve().parent.parent
     pets = {"whisky", "cling", "whisky-ink", "cling-ink", "whisky-color", "cling-color"}
     private_files = {"settings.json", "pets.json", "personal-vocabulary.json", "learning-progress.json",
-                     "browser-pairing-token", "example-translations.json", "learning-progress.pre-fsrs.json"}
+                     "browser-pairing-token", "example-translations.json", "learning-progress.pre-fsrs.json", "learning-progress.lock"}
     private_content = re.compile(rb"/Users/[A-Za-z0-9._-]+/|wxid_|-----BEGIN (?:RSA |OPENSSH |EC )?PRIVATE KEY-----|sk-[A-Za-z0-9_-]{20,}|github_pat_[A-Za-z0-9_]{20,}")
     with zipfile.ZipFile(archive) as package:
         assert package.testzip() is None, "Archive CRC failed"
@@ -40,6 +40,7 @@ def verify(archive, version):
             name = PurePosixPath(decoded_name(item))
             assert not name.is_absolute() and ".." not in name.parts, "Unsafe archive entry"
             assert name.name not in private_files, f"Private runtime file included: {name.name}"
+            assert not name.name.startswith("learning-progress.before-unmarked-cleanup-"), "Private cleanup backup included"
             assert item.file_size < 100_000_000, "Oversized archive entry"
             assert not private_content.search(package.read(item)), f"Potential private content in {name.name}"
 

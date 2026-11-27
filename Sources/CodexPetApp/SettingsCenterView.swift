@@ -1466,10 +1466,10 @@ struct DictionaryCard: View {
                 .help(visibleDescription)
             DictionaryStudyProgressView(progress: summary.studyProgress)
             HStack(spacing: 10) {
-                Text("已认识 \(summary.studyProgress.familiar)")
+                Text("已反馈 \(summary.studyProgress.studied)")
                 Text("学习中 \(summary.studyProgress.learning)")
                 Spacer(minLength: 0)
-                Text("待学习 \(summary.studyProgress.remaining)")
+                Text("未开始 \(summary.studyProgress.remaining)")
             }.font(.caption2).foregroundStyle(.secondary).monospacedDigit()
             Spacer(minLength: 0)
             HStack {
@@ -1482,6 +1482,11 @@ struct DictionaryCard: View {
                     }
                 }
                 Spacer()
+                if summary.studyProgress.legacyUnverified > 0 {
+                    Text("历史 \(summary.studyProgress.legacyUnverified) 待核实")
+                        .font(.caption2).foregroundStyle(.secondary)
+                        .help("这些旧记录缺少逐次反馈证据，已保留，但不计入进度；重新反馈后计入。")
+                }
                 Button(role: .destructive) { confirmDelete = true } label: { Image(systemName: "trash") }
                     .buttonStyle(.borderless)
                     .help(summary.isBuiltIn ? "移除示例，保留学习记录" : "移到废纸篓，保留学习记录")
